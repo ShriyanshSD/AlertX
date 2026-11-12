@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Ambulance, ArrowUpRight, Plus, Search, Shield, Truck, X } from 'lucide-react';
+import { Ambulance, ArrowUpRight, Pencil, Plus, Search, Shield, Truck, X } from 'lucide-react';
 import { FilterTabs, SectionHeading, StatusBadge } from '../components/UI.jsx';
 import useVehicles from '../hooks/useVehicles.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -15,6 +15,8 @@ export default function Vehicles() {
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(initialForm);
+  const [editingVehicle, setEditingVehicle] = useState(null);
+  const [editForm, setEditForm] = useState({ type: 'Ambulance', driverName: '' });
   const [pageError, setPageError] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const matchesStatus = (vehicle, filter) => {
@@ -57,6 +59,43 @@ export default function Vehicles() {
       setPageError(getApiError(requestError));
     }
   };
+
+  const editVehicle = (vehicle) => {
+    setEditingVehicle(vehicle);
+    setEditForm({
+      type: vehicleTypes.includes(vehicle.type) ? vehicle.type : 'Ambulance',
+      driverName: vehicle.driverName || vehicle.crew || '',
+    });
+    setPageError('');
+  };
+
+  const saveVehicleDetails = async (event) => {
+    event.preventDefault();
+    if (!editingVehicle) return;
+    setPageError('');
+    try {
+      if (backend) {
+        const { data } = await api.patch(`/vehicles/${encodeURIComponent(editingVehicle.id)}`, {
+          type: apiVehicleTypes[editForm.type],
+          driverName: editForm.driverName.trim(),
+        });
+        const changed = {
+          ...data.data.vehicle,
+          id: data.data.vehicle.vehicleId,
+          type: vehicleTypes.find((type) => apiVehicleTypes[type] === data.data.vehicle.type),
+          crew: data.data.vehicle.driverName || 'Unassigned',
+        };
+        setVehicles((current) => current.map((vehicle) => vehicle.id === editingVehicle.id ? { ...vehicle, ...changed } : vehicle));
+      } else {
+        setVehicles((current) => current.map((vehicle) => vehicle.id === editingVehicle.id
+          ? { ...vehicle, type: editForm.type, crew: editForm.driverName || 'Unassigned' }
+          : vehicle));
+      }
+      setEditingVehicle(null);
+    } catch (requestError) {
+      setPageError(getApiError(requestError));
+    }
+  };
   const addVehicle = async (event) => {
     event.preventDefault();
     if (vehicles.some((vehicle) => vehicle.id.toLowerCase() === form.id.trim().toLowerCase())) {
@@ -87,9 +126,21 @@ export default function Vehicles() {
   return <><SectionHeading eyebrow="FLEET OPERATIONS" title="Vehicle management" description="Review, update, and organize response vehicles." action={canManage && <button className="button primary" onClick={() => setAdding(!adding)}><Plus size={16} /> Add vehicle</button>} />
     {(vehicleError || pageError) && <p className="form-error" role="alert">{pageError || vehicleError}</p>}
     <div className="vehicle-summary"><div className="panel summary-chip"><span className="summary-icon blue"><Ambulance size={17} /></span><span><small>Ambulances</small><strong>{vehicles.filter((item) => item.type === 'Ambulance').length}</strong></span></div><div className="panel summary-chip"><span className="summary-icon orange"><Truck size={17} /></span><span><small>Fire trucks</small><strong>{vehicles.filter((item) => item.type === 'Fire Truck').length}</strong></span></div><div className="panel summary-chip"><span className="summary-icon purple"><Shield size={17} /></span><span><small>Police vehicles</small><strong>{vehicles.filter((item) => item.type === 'Police Car').length}</strong></span></div></div>
+    {editingVehicle && <form className="panel add-contact-form" onSubmit={saveVehicleDetails}>
+      <div className="panel-heading">
+        <div><h2>Edit {editingVehicle.id}</h2><p>Manage its emergency service type and assigned crew label.</p></div>
+        <button type="button" className="icon-button" onClick={() => setEditingVehicle(null)} aria-label="Close edit form"><X size={16} /></button>
+      </div>
+      <div className="form-grid">
+        <label>Service type<select value={editForm.type} onChange={(event) => setEditForm({ ...editForm, type: event.target.value })}>{vehicleTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
+        <label>Driver / crew<input maxLength={100} value={editForm.driverName} onChange={(event) => setEditForm({ ...editForm, driverName: event.target.value })} /></label>
+        <button className="button primary" type="submit">Save service details</button>
+      </div>
+    </form>}
     {adding && <form className="panel add-contact-form" onSubmit={addVehicle}><div className="panel-heading"><div><h2>Add fleet unit</h2><p>Choose a service type and unique vehicle ID</p></div><button type="button" className="icon-button" onClick={() => setAdding(false)} aria-label="Close form"><X size={16} /></button></div><div className="form-grid"><label>Vehicle ID<input required value={form.id} onChange={(event) => setForm({ ...form, id: event.target.value })} placeholder="e.g. AMB-103" /></label><label>Service type<select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}>{vehicleTypes.map((type) => <option key={type}>{type}</option>)}</select></label><button className="button primary" type="submit"><Plus size={15} /> Add to fleet</button></div></form>}
     <FilterTabs tabs={statusTabs} value={statusFilter} onChange={setStatusFilter} label="Filter vehicles by status" />
-    <section className="panel vehicles-table-panel"><div className="panel-heading"><div><h2>Response fleet</h2><p>{vehicles.length} units · {backend ? 'server-managed fleet' : 'locally simulated status'}</p></div><div className="search-field table-search"><Search size={15} /><input placeholder="Search fleet..." value={query} onChange={(event) => setQuery(event.target.value)} /></div></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Vehicle</th><th>Type</th><th>Current status</th><th>Crew</th><th>Position</th><th>Speed</th>{canManage && <th>Actions</th>}</tr></thead><tbody>{filtered.map((vehicle) => <tr key={vehicle.id}><td><strong className="table-id">{vehicle.id}</strong></td><td>{vehicle.type}</td><td><select className="table-status-select" value={vehicle.status} disabled={!canManage} onChange={(event) => setStatus(vehicle.id, event.target.value)} aria-label={`Set ${vehicle.id} status`}>{['available', 'en_route', 'responding', 'patrolling', 'offline'].map((status) => <option key={status} value={status}>{status.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select></td><td>{vehicle.crew}</td><td className="muted">{Number.isFinite(vehicle.lat) && Number.isFinite(vehicle.lng) ? `${vehicle.lat.toFixed(4)}, ${vehicle.lng.toFixed(4)}` : 'Unavailable'}</td><td>{vehicle.speed || 0} km/h</td>{canManage && <td><button className="icon-button danger-hover" onClick={() => remove(vehicle.id)} aria-label={`Remove ${vehicle.id}`}><X size={15} /></button></td>}</tr>)}</tbody></table>{filtered.length === 0 && <p className="muted small empty-filter">No vehicles match your filters.</p>}</div></section>
+    <section className="panel vehicles-table-panel"><div className="panel-heading"><div><h2>Response fleet</h2><p>{vehicles.length} units · {backend ? 'server-managed fleet' : 'locally simulated status'}</p></div><div className="search-field table-search"><Search size={15} /><input placeholder="Search fleet..." value={query} onChange={(event) => setQuery(event.target.value)} /></div></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Vehicle</th><th>Type</th><th>Current status</th><th>Crew</th><th>Position</th><th>Speed</th>{canManage && <th>Actions</th>}</tr></thead><tbody>{filtered.map((vehicle) => <tr key={vehicle.id}><td><strong className="table-id">{vehicle.id}</strong></td><td>{vehicle.type}</td><td><select className="table-status-select" value={vehicle.status} disabled={!canManage} onChange={(event) => setStatus(vehicle.id, event.target.value)} aria-label={`Set ${vehicle.id} status`}>{['available', 'en_route', 'responding', 'patrolling', 'offline'].map((status) => <option key={status} value={status}>{status.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select></td><td>{vehicle.crew}</td><td className="muted">{Number.isFinite(vehicle.lat) && Number.isFinite(vehicle.lng) ? `${vehicle.lat.toFixed(4)}, ${vehicle.lng.toFixed(4)}` : 'Unavailable'}</td><td>{vehicle.speed || 0} km/h</td>{canManage && <td>    <button type="button" className="icon-button" disabled={!canManage} onClick={() => editVehicle(vehicle)} aria-label={`Edit ${vehicle.id}`}><Pencil size={15} /></button>
+    <button type="button" className="icon-button danger-hover" disabled={!canManage} onClick={() => remove(vehicle.id)} aria-label={`Remove ${vehicle.id}`}><X size={15} /></button></td>}</tr>)}</tbody></table>{filtered.length === 0 && <p className="muted small empty-filter">No vehicles match your filters.</p>}</div></section>
     <p className="privacy-note"><ArrowUpRight size={14} /> Vehicle records are managed in this workspace; AlertX is not connected to real emergency services.</p>
   </>;
 }

@@ -149,3 +149,17 @@ export const deleteVehicle = asyncHandler(async (request, response) => {
   response.json({ data: { deleted: vehicle.vehicleId } });
 });
 
+export const updateVehicleDetails = asyncHandler(async (request, response) => {
+  const vehicle = await Vehicle.findOne({ vehicleId: request.params.vehicleId.toUpperCase() });
+  if (!vehicle) throw new AppError(404, 'Vehicle not found.');
+  if (vehicle.assignedSOS
+    && ((request.body.type && request.body.type !== vehicle.type)
+      || (request.body.driverName && request.body.driverName !== vehicle.driverName))) {
+    throw new AppError(409, 'Resolve the active SOS before changing this fleet unit.');
+  }
+  if (request.body.type !== undefined) vehicle.type = request.body.type;
+  if (request.body.driverName !== undefined) vehicle.driverName = request.body.driverName || 'Unassigned';
+  await vehicle.save();
+  response.json({ data: { vehicle: serializeVehicle(vehicle) } });
+});
+

@@ -11,11 +11,11 @@ import { DEMO_CONTACTS, DEMO_SOS, DEMO_VEHICLES } from '../data/demoData.js';
 import { toPoint } from '../utils/geo.js';
 import { seedKnowledgeBase } from './seedKnowledge.js';
 
-async function requiredCredential(emailKey, passwordKey) {
+async function requiredCredential(emailKey, passwordKey, minimumPasswordLength = 12) {
   const email = process.env[emailKey]?.trim().toLowerCase();
   const password = process.env[passwordKey];
-  if (!email || !password || password.length < 12) {
-    throw new Error(`${emailKey} and ${passwordKey} are required; passwords must be at least 12 characters.`);
+  if (!email || !password || password.length < minimumPasswordLength) {
+    throw new Error(`${emailKey} and ${passwordKey} are required; passwords must be at least ${minimumPasswordLength} characters.`);
   }
   return { email, password };
 }
@@ -31,7 +31,7 @@ async function upsertUser({ email, password, name, role }) {
 
 export async function seedDatabase() {
   const [adminCredentials, operatorCredentials, driverCredentials, userCredentials] = await Promise.all([
-    requiredCredential('DEMO_ADMIN_EMAIL', 'DEMO_ADMIN_PASSWORD'),
+    requiredCredential('DEMO_ADMIN_EMAIL', 'DEMO_ADMIN_PASSWORD', 16),
     requiredCredential('DEMO_OPERATOR_EMAIL', 'DEMO_OPERATOR_PASSWORD'),
     requiredCredential('DEMO_DRIVER_EMAIL', 'DEMO_DRIVER_PASSWORD'),
     requiredCredential('DEMO_USER_EMAIL', 'DEMO_USER_PASSWORD'),

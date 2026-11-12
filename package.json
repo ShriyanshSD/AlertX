@@ -10,6 +10,7 @@
     "start": "node server/server.js",
     "server": "node server/server.js",
     "seed": "node server/seed/seed.js",
+    "seed:admin": "node server/seed/seedAdmin.js",
     "seed:knowledge": "node server/seed/seedKnowledge.js",
     "test": "node --test"
   },

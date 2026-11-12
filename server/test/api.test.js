@@ -216,6 +216,188 @@ const suite = describe('ResQ API and real-time services', () => {
     assert.equal(userResponse.body.data.users.some((user) => 'passwordHash' in user), false);
   });
 
+  it('lets admins create and manage accounts while preventing privilege and self-delete errors', async () => {
+    const weakPassword = await adminAgent.post('/api/admin/users').send({
+      name: 'Short Password',
+      email: 'short-password@test.local',
+      password: 'short',
+      role: 'user',
+    });
+    assert.equal(weakPassword.status, 400);
+
+    const created = await adminAgent.post('/api/admin/users').send({
+      name: 'Managed Account',
+      email: 'managed-account@test.local',
+      password: 'A-long-test-password-123!',
+      role: 'driver',
+    });
+    assert.equal(created.status, 201);
+    assert.equal(created.body.data.user.role, 'driver');
+    assert.equal('passwordHash' in created.body.data.user, false);
+
+    const forbiddenUpdate = await userAgent.patch(`/api/admin/users/${created.body.data.user.id}`).send({ role: 'admin' });
+    assert.equal(forbiddenUpdate.status, 403);
+
+    const changed = await adminAgent.patch(`/api/admin/users/${created.body.data.user.id}`).send({
+      name: 'Updated Managed Account',
+      phone: '+91 90000 00001',
+      role: 'operator',
+    });
+    assert.equal(changed.status, 200);
+    assert.equal(changed.body.data.user.name, 'Updated Managed Account');
+    assert.equal(changed.body.data.user.role, 'operator');
+
+    const rejectedSecret = await adminAgent.patch(`/api/admin/users/${created.body.data.user.id}`).send({
+      passwordHash: 'never-accepted',
+    });
+    assert.equal(rejectedSecret.status, 400);
+
+    const selfDelete = await adminAgent.delete(`/api/admin/users/${admin._id}`);
+    assert.equal(selfDelete.status, 409);
+
+    const removed = await adminAgent.delete(`/api/admin/users/${created.body.data.user.id}`);
+    assert.equal(removed.status, 200);
+    assert.equal(removed.body.data.deleted, true);
+  });
+
+  it('protects active SOS requests and removes owned data when deleting an account', async () => {
+    const managedUser = await User.create({
+      name: 'Data Removal Driver',
+      email: 'data-removal-driver@test.local',
+      passwordHash: await bcrypt.hash('test-password-123', 4),
+      role: 'driver',
+    });
+    const ownedContact = await Contact.create({
+      userId: managedUser._id,
+      contactCode: 'C-DELETE-TEST',
+      name: 'Delete Test Contact',
+      phone: '+91 90000 00000',
+      relationship: 'Friend',
+    });
+    const ownedSos = await SOS.create({
+      sosId: 'SOS-DELETE-TEST',
+      userId: managedUser._id,
+      emergencyType: 'medical',
+      priority: 'critical',
+      location: toPoint({ lat: 28.671, lng: 77.455 }),
+      status: 'resolved',
+      resolvedAt: new Date(),
+      alertContacts: [{ contactId: ownedContact._id, status: 'in_app_created' }],
+    });
+    const activeSos = await SOS.create({
+      sosId: 'SOS-ACTIVE-DELETE-TEST',
+      userId: managedUser._id,
+      emergencyType: 'medical',
+      priority: 'high',
+      location: toPoint({ lat: 28.671, lng: 77.455 }),
+      status: 'pending',
+    });
+    const assignedVehicle = await Vehicle.create({
+      vehicleId: 'AMB-DELETE-TEST',
+      type: 'ambulance',
+      status: 'available',
+      driverName: 'Data Removal Driver',
+      operatorId: managedUser._id,
+      assignedSOS: ownedSos._id,
+      currentLocation: toPoint({ lat: 28.671, lng: 77.455 }),
+      isDemo: false,
+      speed: 0,
+    });
+    ownedSos.assignedVehicle = assignedVehicle._id;
+    await ownedSos.save();
+    const activeAssignedSos = await SOS.create({
+      sosId: 'SOS-DRIVER-ACTIVE-DELETE-TEST',
+      userId: otherUser._id,
+      emergencyType: 'medical',
+      priority: 'high',
+      location: toPoint({ lat: 28.672, lng: 77.456 }),
+      status: 'responding',
+      assignedVehicle: assignedVehicle._id,
+      alertContacts: [{ contactId: ownedContact._id, status: 'in_app_created' }],
+    });
+    assignedVehicle.assignedSOS = activeAssignedSos._id;
+    await assignedVehicle.save();
+    const externalSos = await SOS.create({
+      sosId: 'SOS-EXTERNAL-CONTACT-TEST',
+      userId: otherUser._id,
+      emergencyType: 'medical',
+      priority: 'medium',
+      location: toPoint({ lat: 28.672, lng: 77.456 }),
+      status: 'resolved',
+      alertContacts: [{ contactId: ownedContact._id, status: 'consent_required' }],
+    });
+    await Promise.all([
+      EmergencyAlert.create({
+        sosId: ownedSos._id,
+        contactId: ownedContact._id,
+        recipientUserId: managedUser._id,
+        status: 'created',
+      }),
+      AIConversation.create({ userId: managedUser._id, messages: [{ role: 'user', content: 'Test message' }] }),
+      AIActivity.create({ userId: managedUser._id, provider: 'knowledge_base' }),
+    ]);
+
+    const blocked = await adminAgent.delete(`/api/admin/users/${managedUser._id}`);
+    assert.equal(blocked.status, 409);
+    assert.ok(await User.exists({ _id: managedUser._id }));
+
+    await SOS.updateOne({ _id: activeSos._id }, { $set: { status: 'resolved', resolvedAt: new Date() } });
+    const blockedDriverRemoval = await adminAgent.delete(`/api/admin/users/${managedUser._id}`);
+    assert.equal(blockedDriverRemoval.status, 409);
+    const blockedDriverDemotion = await adminAgent.patch(`/api/admin/users/${managedUser._id}`).send({ role: 'user' });
+    assert.equal(blockedDriverDemotion.status, 409);
+
+    await SOS.updateOne({ _id: activeAssignedSos._id }, { $set: { status: 'resolved', resolvedAt: new Date() } });
+    const removed = await adminAgent.delete(`/api/admin/users/${managedUser._id}`);
+    assert.equal(removed.status, 200);
+
+    const [remainingContacts, remainingSos, remainingAlerts, remainingConversation, remainingActivity, updatedVehicle, preservedSos] = await Promise.all([
+      Contact.countDocuments({ userId: managedUser._id }),
+      SOS.countDocuments({ userId: managedUser._id }),
+      EmergencyAlert.countDocuments({ recipientUserId: managedUser._id }),
+      AIConversation.countDocuments({ userId: managedUser._id }),
+      AIActivity.countDocuments({ userId: managedUser._id }),
+      Vehicle.findById(assignedVehicle._id).lean(),
+      SOS.findById(externalSos._id).lean(),
+    ]);
+    assert.equal(remainingContacts, 0);
+    assert.equal(remainingSos, 0);
+    assert.equal(remainingAlerts, 0);
+    assert.equal(remainingConversation, 0);
+    assert.equal(remainingActivity, 0);
+    assert.equal(updatedVehicle.operatorId, null);
+    assert.equal(updatedVehicle.assignedSOS, null);
+    assert.equal(updatedVehicle.driverName, 'Unassigned');
+    assert.equal(preservedSos.alertContacts.length, 0);
+  });
+
+  it('lets authorized dispatchers edit a fleet unit service type and crew label', async () => {
+    const created = await adminAgent.post('/api/vehicles').send({
+      vehicleId: 'AMB-EDIT-TEST',
+      type: 'ambulance',
+      driverName: 'Initial Crew',
+      location: { lat: 28.671, lng: 77.455 },
+    });
+    assert.equal(created.status, 201);
+
+    const forbidden = await userAgent.patch('/api/vehicles/AMB-EDIT-TEST').send({ type: 'fire_truck' });
+    assert.equal(forbidden.status, 403);
+
+    const invalid = await adminAgent.patch('/api/vehicles/AMB-EDIT-TEST').send({ type: 'tow_truck' });
+    assert.equal(invalid.status, 400);
+
+    const changed = await adminAgent.patch('/api/vehicles/AMB-EDIT-TEST').send({
+      type: 'fire_truck',
+      driverName: 'Updated Crew',
+    });
+    assert.equal(changed.status, 200);
+    assert.equal(changed.body.data.vehicle.type, 'fire_truck');
+    assert.equal(changed.body.data.vehicle.driverName, 'Updated Crew');
+
+    const removed = await adminAgent.delete('/api/vehicles/AMB-EDIT-TEST');
+    assert.equal(removed.status, 200);
+  });
+
   it('limits fleet visibility and ranks nearby vehicles by straight-line distance', async () => {
     const visibleToUser = await userAgent.get('/api/vehicles');
     assert.equal(visibleToUser.status, 200);

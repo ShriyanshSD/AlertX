@@ -82,6 +82,34 @@ export const contactSchemas = {
   }).refine((value) => Object.keys(value).length > 0, 'At least one field must be provided.'),
 };
 
+export const adminUserSchemas = {
+  id: z.object({
+    userId: z.string().regex(/^[\da-f]{24}$/i, 'User ID is invalid.'),
+  }),
+  create: z.object({
+    name: z.string().trim().min(2).max(100),
+    email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
+    phone: z.string().trim().max(30).optional(),
+    password: z.string().min(16).max(128),
+    role: z.enum(['user', 'driver', 'operator', 'admin']),
+  }).strict(),
+  update: z.object({
+    name: z.string().trim().min(2).max(100).optional(),
+    email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()).optional(),
+    phone: z.string().trim().max(30).optional(),
+    role: z.enum(['user', 'driver', 'operator', 'admin']).optional(),
+  }).strict().refine((value) => Object.keys(value).length > 0, {
+    message: 'At least one account field must be provided.',
+  }),
+};
+
+export const vehicleUpdateSchema = z.object({
+  type: z.enum(['ambulance', 'fire_truck', 'police']).optional(),
+  driverName: z.string().trim().max(100).optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, {
+  message: 'At least one fleet service field must be provided.',
+});
+
 export const adminSchemas = {
   users: z.object({
     page: z.coerce.number().int().min(1).default(1),

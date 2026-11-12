@@ -1,9 +1,12 @@
+import bcrypt from 'bcryptjs';
 import Contact from '../models/Contact.js';
 import SOS from '../models/SOS.js';
 import User from '../models/User.js';
 import Vehicle from '../models/Vehicle.js';
 import EmergencyAlert from '../models/EmergencyAlert.js';
 import AIActivity from '../models/AIActivity.js';
+import AIConversation from '../models/AIConversation.js';
+import AppError from '../utils/AppError.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { serializeUser } from '../utils/serializers.js';
 
@@ -39,6 +42,127 @@ export const listUsers = asyncHandler(async (request, response) => {
     User.countDocuments(),
   ]);
   response.json({ data: { users: users.map(serializeUser), page, limit, total } });
+});
+
+export const createUser = asyncHandler(async (request, response) => {
+  const { name, email, phone = '', password, role } = request.body;
+  if (await User.exists({ email })) {
+    throw new AppError(409, 'An account with this email already exists.');
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  let user;
+  try {
+    user = await User.create({ name, email, phone, passwordHash, role });
+  } catch (error) {
+    if (error?.code === 11000) {
+      throw new AppError(409, 'An account with this email already exists.');
+    }
+    throw error;
+  }
+  response.status(201).json({ data: { user: serializeUser(user) } });
+});
+
+export const updateUser = asyncHandler(async (request, response) => {
+  const user = await User.findById(request.params.userId);
+  if (!user) throw new AppError(404, 'User account not found.');
+
+  const { name, email, phone, role } = request.body;
+  if (role && role !== user.role) {
+    if (String(user._id) === String(request.user._id)) {
+      throw new AppError(409, 'You cannot change your own account role.');
+    }
+    if (user.role === 'admin' && role !== 'admin' && await User.countDocuments({ role: 'admin' }) <= 1) {
+      throw new AppError(409, 'The last administrator cannot be demoted.');
+    }
+  }
+  if (email && email !== user.email && await User.exists({ email, _id: { $ne: user._id } })) {
+    throw new AppError(409, 'An account with this email already exists.');
+  }
+
+  const previousRole = user.role;
+  if (previousRole === 'driver' && role && role !== 'driver') {
+    const assignedVehicleIds = await Vehicle.find({ operatorId: user._id }).distinct('_id');
+    if (await SOS.exists({
+      assignedVehicle: { $in: assignedVehicleIds },
+      status: { $in: ['pending', 'assigned', 'responding'] },
+    })) {
+      throw new AppError(409, 'Resolve active SOS requests assigned to this driver before changing their role.');
+    }
+  }
+  if (name !== undefined) user.name = name;
+  if (email !== undefined) user.email = email;
+  if (phone !== undefined) user.phone = phone;
+  if (role !== undefined) user.role = role;
+  await user.save();
+
+  if (previousRole === 'driver' && user.role !== 'driver') {
+    await Vehicle.updateMany(
+      { operatorId: user._id },
+      { $set: { operatorId: null, driverName: 'Unassigned', assignedSOS: null } },
+    );
+  }
+  response.json({ data: { user: serializeUser(user) } });
+});
+
+export const deleteUser = asyncHandler(async (request, response) => {
+  const user = await User.findById(request.params.userId);
+  if (!user) throw new AppError(404, 'User account not found.');
+  if (String(user._id) === String(request.user._id)) {
+    throw new AppError(409, 'You cannot remove your own administrator account.');
+  }
+  if (user.role === 'admin' && await User.countDocuments({ role: 'admin' }) <= 1) {
+    throw new AppError(409, 'The last administrator cannot be removed.');
+  }
+  const assignedVehicleIds = await Vehicle.find({ operatorId: user._id }).distinct('_id');
+  if (await SOS.exists({
+    status: { $in: ['pending', 'assigned', 'responding'] },
+    $or: [
+      { userId: user._id },
+      { assignedVehicle: { $in: assignedVehicleIds } },
+    ],
+  })) {
+    throw new AppError(409, "Resolve active SOS requests owned by this user or assigned to their fleet units before removing this account.");
+  }
+
+  const [contacts, sosRecords] = await Promise.all([
+    Contact.find({ userId: user._id }).select('_id').lean(),
+    SOS.find({ userId: user._id }).select('_id').lean(),
+  ]);
+  const contactIds = contacts.map(({ _id }) => _id);
+  const sosIds = sosRecords.map(({ _id }) => _id);
+  const alertReferences = [{ recipientUserId: user._id }];
+  if (contactIds.length) alertReferences.push({ contactId: { $in: contactIds } });
+  if (sosIds.length) alertReferences.push({ sosId: { $in: sosIds } });
+
+  const cleanup = [
+    EmergencyAlert.deleteMany({ $or: alertReferences }),
+    Contact.deleteMany({ userId: user._id }),
+    SOS.deleteMany({ userId: user._id }),
+    AIConversation.deleteOne({ userId: user._id }),
+    AIActivity.deleteMany({ userId: user._id }),
+    Vehicle.updateMany(
+      { operatorId: user._id },
+      { $set: { operatorId: null, driverName: 'Unassigned', assignedSOS: null } },
+    ),
+  ];
+  if (contactIds.length) {
+    cleanup.push(SOS.updateMany(
+      { 'alertContacts.contactId': { $in: contactIds } },
+      { $pull: { alertContacts: { contactId: { $in: contactIds } } } },
+    ));
+  }
+  if (sosIds.length) {
+    cleanup.push(Vehicle.updateMany(
+      { assignedSOS: { $in: sosIds } },
+      { $set: { assignedSOS: null } },
+    ));
+  }
+  await Promise.all(cleanup);
+
+  const result = await User.deleteOne({ _id: user._id });
+  if (result.deletedCount !== 1) throw new AppError(409, 'The account changed before it could be removed.');
+  response.json({ data: { deleted: true, userId: String(user._id) } });
 });
 
 export const analytics = asyncHandler(async (request, response) => {

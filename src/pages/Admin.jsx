@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Ambulance, ArrowRight, ArrowUpRight, Bot, Clock3, Shield, Siren, Users } from 'lucide-react';
+import { Activity, Ambulance, ArrowRight, ArrowUpRight, Bot, Clock3, Pencil, Plus, Shield, Siren, Trash2, Users, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ActivityBarChart } from '../components/Charts.jsx';
 import { DashboardCard, FilterTabs, SectionHeading, StatusBadge } from '../components/UI.jsx';
@@ -27,6 +27,11 @@ export default function Admin() {
   const [summary, setSummary] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [users, setUsers] = useState([]);
+  const [userFormOpen, setUserFormOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [userForm, setUserForm] = useState({ name: '', email: '', phone: '', role: 'user', password: '' });
+  const [userError, setUserError] = useState('');
+  const [savingUser, setSavingUser] = useState(false);
   const [error, setError] = useState('');
   const [filters, setFilters] = useState(emptyFilters);
   const [activeTab, setActiveTab] = useState('overview');
@@ -49,6 +54,68 @@ export default function Admin() {
       .catch((requestError) => { if (active) setError(getApiError(requestError)); });
     return () => { active = false; };
   }, [user]);
+
+  const openUserForm = (account = null) => {
+    setEditingUser(account);
+    setUserForm({
+      name: account?.name || '',
+      email: account?.email || '',
+      phone: account?.phone || '',
+      role: account?.role || 'user',
+      password: '',
+    });
+    setUserError('');
+    setUserFormOpen(true);
+  };
+
+  const saveUser = async (event) => {
+    event.preventDefault();
+    setUserError('');
+    setSavingUser(true);
+    try {
+      if (editingUser) {
+        const { data } = await api.patch(`/admin/users/${encodeURIComponent(editingUser.id)}`, {
+          name: userForm.name,
+          email: userForm.email,
+          phone: userForm.phone,
+          role: userForm.role,
+        });
+        setUsers((current) => current.map((account) => account.id === editingUser.id ? data.data.user : account));
+      } else {
+        const { data } = await api.post('/admin/users', userForm);
+        setUsers((current) => [data.data.user, ...current]);
+        setSummary((current) => current ? {
+          ...current,
+          totals: { ...current.totals, users: (current.totals.users || 0) + 1 },
+        } : current);
+      }
+      setUserFormOpen(false);
+      setEditingUser(null);
+      setUserForm({ name: '', email: '', phone: '', role: 'user', password: '' });
+    } catch (requestError) {
+      setUserError(getApiError(requestError));
+    } finally {
+      setSavingUser(false);
+    }
+  };
+
+  const removeUser = async (account) => {
+    const confirmed = window.confirm(
+      `Permanently remove ${account.email}, their contacts, resolved SOS history, and AI data? Active SOS requests must be resolved first.`,
+    );
+    if (!confirmed) return;
+    setUserError('');
+    try {
+      await api.delete(`/admin/users/${encodeURIComponent(account.id)}`);
+      setUsers((current) => current.filter((entry) => entry.id !== account.id));
+      setSummary((current) => current ? {
+        ...current,
+        totals: { ...current.totals, users: Math.max(0, (current.totals.users || 0) - 1) },
+      } : current);
+    } catch (requestError) {
+      setUserError(getApiError(requestError));
+    }
+  };
 
   useEffect(() => {
     if (!user || user.role !== 'admin') return undefined;
@@ -127,7 +194,53 @@ export default function Admin() {
       <div className="panel admin-breakdown-panel"><div className="panel-heading"><div><h2>Response status</h2><p>Filtered incident counts</p></div></div>{breakdownRows(analytics?.byStatus)}</div>
     </section>}
     {['overview', 'response'].includes(activeTab) && <section className="panel admin-sos-preview"><div className="panel-heading"><div><h2>Latest incident requests</h2><p>Recent records · source shown where available</p></div><Link to="/history" className="panel-link">View history <ArrowRight size={14} /></Link></div><div className="admin-sos-list">{filteredSos.slice(0, 5).map((item) => <div className="admin-sos-item" key={item.sosId || item.id}><span className="admin-sos-icon"><Siren size={15} /></span><span><strong>{item.sosId || item.id} · {item.type}</strong><small>{item.location || 'Location unavailable'} · {item.isDemo ? 'Simulated record' : 'Reported record'}</small></span><StatusBadge tone={item.priority?.toLowerCase()}>{item.priority}</StatusBadge><small className="muted"><Clock3 size={12} /> {item.time}</small></div>)}{filteredSos.length === 0 && <p className="muted small">No incidents match the selected filters.</p>}</div></section>}
-    {user?.role === 'admin' && activeTab === 'response' && <section className="panel vehicles-table-panel"><div className="panel-heading"><div><h2>Registered users</h2><p>{summary?.totals.users ?? users.length} accounts · password data is never displayed</p></div><span className="demo-pill">ADMIN ONLY</span></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Created</th></tr></thead><tbody>{users.map((account) => <tr key={account.id}><td>{account.name}</td><td>{account.email}</td><td><StatusBadge>{account.role}</StatusBadge></td><td>{new Date(account.createdAt).toLocaleDateString()}</td></tr>)}</tbody></table></div></section>}
+    {user?.role === 'admin' && activeTab === 'response' && <>
+      {userFormOpen && <form className="panel add-contact-form" onSubmit={saveUser}>
+        <div className="panel-heading">
+          <div>
+            <h2>{editingUser ? 'Edit account' : 'Create account'}</h2>
+            <p>Passwords are hashed by the server and never displayed.</p>
+          </div>
+          <button type="button" className="icon-button" onClick={() => setUserFormOpen(false)} aria-label="Close account form"><X size={16} /></button>
+        </div>
+        {userError && <p className="form-error" role="alert">{userError}</p>}
+        <div className="form-grid">
+          <label>Full name<input required minLength={2} maxLength={100} value={userForm.name} onChange={(event) => setUserForm({ ...userForm, name: event.target.value })} /></label>
+          <label>Email address<input required type="email" maxLength={254} value={userForm.email} onChange={(event) => setUserForm({ ...userForm, email: event.target.value })} /></label>
+          <label>Phone number<input maxLength={30} value={userForm.phone} onChange={(event) => setUserForm({ ...userForm, phone: event.target.value })} /></label>
+          <label>Account role<select value={userForm.role} disabled={editingUser?.id === user.id} onChange={(event) => setUserForm({ ...userForm, role: event.target.value })}>
+            {['user', 'driver', 'operator', 'admin'].map((role) => <option key={role} value={role}>{role}</option>)}
+          </select></label>
+          {!editingUser && <label>Initial password<input required type="password" autoComplete="new-password" minLength={16} maxLength={128} value={userForm.password} onChange={(event) => setUserForm({ ...userForm, password: event.target.value })} /><small>Use at least 16 characters.</small></label>}
+          <button className="button primary" type="submit" disabled={savingUser}>
+            {editingUser ? 'Save changes' : 'Create account'}
+          </button>
+        </div>
+      </form>}
+      {userError && !userFormOpen && <p className="form-error" role="alert">{userError}</p>}
+      <section className="panel vehicles-table-panel">
+        <div className="panel-heading">
+          <div><h2>Registered users</h2><p>{summary?.totals.users ?? users.length} accounts · password data is never displayed</p></div>
+          <div className="settings-save-row">
+            <span className="demo-pill">ADMIN ONLY</span>
+            <button type="button" className="button secondary" onClick={() => openUserForm()}><Plus size={15} /> Add account</button>
+          </div>
+        </div>
+        <div className="table-scroll">
+          <table className="data-table">
+            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Created</th><th>Actions</th></tr></thead>
+            <tbody>{users.map((account) => <tr key={account.id}>
+              <td>{account.name}</td><td>{account.email}</td><td><StatusBadge>{account.role}</StatusBadge></td>
+              <td>{new Date(account.createdAt).toLocaleDateString()}</td>
+              <td>
+                <button type="button" className="icon-button" onClick={() => openUserForm(account)} aria-label={`Edit ${account.email}`}><Pencil size={15} /></button>
+                {account.id !== user.id && <button type="button" className="icon-button danger-hover" onClick={() => removeUser(account)} aria-label={`Remove ${account.email}`}><Trash2 size={15} /></button>}
+              </td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+      </section>
+    </>}
     {backendAvailable && user?.role === 'admin' && <p className="privacy-note"><ArrowUpRight size={14} /> AI metrics contain request counts and categories only, not prompt text. Straight-line distance is not an ETA.</p>}
   </>;
 }

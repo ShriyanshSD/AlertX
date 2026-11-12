@@ -64,6 +64,7 @@ All vehicle routes require authentication unless otherwise noted. Vehicle `type`
 | `GET /vehicles/nearby?lat=28.67&lng=77.45&radiusKm=10&type=ambulance` | Operator/admin | Lists available vehicles with straight-line `distanceKm`; this is not an ETA |
 | `GET /vehicles/simulation` | Operator/admin | Gets demo simulator status |
 | `POST /vehicles` | Operator/admin | Adds a vehicle using `{ "vehicleId", "type", "driverName", "operatorId", "location": { "lat", "lng" } }` |
+| `PATCH /vehicles/:vehicleId` | Operator/admin | Updates the service type and crew label; blocked while an SOS is assigned |
 | `PATCH /vehicles/:vehicleId/status` | Operator/admin | Changes status |
 | `POST /vehicles/:vehicleId/location` | Assigned driver, non-demo vehicle only | Reports `{ "location": { "lat", "lng" }, "speed": 0 }` |
 | `DELETE /vehicles/:vehicleId` | Operator/admin | Removes an unassigned vehicle |
@@ -111,6 +112,9 @@ Admin-only routes:
 
 - `GET /admin/dashboard` — aggregate counts and recent SOS records.
 - `GET /admin/users?page=1&limit=50` — safe user profiles; password hashes are never returned.
+- `POST /admin/users` — creates a user, driver, operator, or administrator account. The initial password must be at least 16 characters.
+- `PATCH /admin/users/:userId` — updates name, email, phone, and/or role. Administrators cannot change their own role or demote the last administrator.
+- `DELETE /admin/users/:userId` — permanently removes an account and its contacts, resolved SOS history, in-app alert records, and AI data. Removal is blocked for the signed-in administrator and for users with active SOS requests; driver assignments are cleared without deleting fleet units.
 - `GET /admin/analytics?from=2026-01-01&to=2026-12-31&type=medical&priority=critical&status=resolved` — filtered SOS counts by type/status/priority, vehicle utilization, in-app alert count, and content-free AI activity counts. All filters are optional; date values use `YYYY-MM-DD`.
 - `GET /admin/simulation` — simulator state.
 - `POST /admin/simulation/start`, `/stop`, `/reset` — controls the server demo simulator.
