@@ -22,6 +22,7 @@ const Contact = (await import('../models/Contact.js')).default;
 const EmergencyAlert = (await import('../models/EmergencyAlert.js')).default;
 const LocationHistory = (await import('../models/LocationHistory.js')).default;
 const { createServerlessDemoSimulator } = await import('../services/serverlessDemoSimulator.js');
+const { readAdminCredentials } = await import('../seed/seedAdmin.js');
 const KnowledgeDocument = (await import('../models/KnowledgeDocument.js')).default;
 const AIConversation = (await import('../models/AIConversation.js')).default;
 const AIActivity = (await import('../models/AIActivity.js')).default;
@@ -258,6 +259,24 @@ const suite = describe('ResQ API and real-time services', () => {
     const removed = await adminAgent.delete(`/api/admin/users/${created.body.data.user.id}`);
     assert.equal(removed.status, 200);
     assert.equal(removed.body.data.deleted, true);
+  });
+
+  it('allows short bootstrap passwords only for localhost development databases', () => {
+    const localCredentials = {
+      NODE_ENV: 'development',
+      MONGODB_URI: 'mongodb://127.0.0.1:27017/resq_local_demo',
+      DEMO_ADMIN_EMAIL: 'admin@gmail.com',
+      DEMO_ADMIN_PASSWORD: 'demo-pass',
+    };
+    assert.equal(readAdminCredentials(localCredentials).email, 'admin@gmail.com');
+    assert.throws(
+      () => readAdminCredentials({ ...localCredentials, MONGODB_URI: 'mongodb+srv://cluster.example/resq' }),
+      /at least 16 characters/,
+    );
+    assert.throws(
+      () => readAdminCredentials({ ...localCredentials, NODE_ENV: 'production' }),
+      /at least 16 characters/,
+    );
   });
 
   it('protects active SOS requests and removes owned data when deleting an account', async () => {
