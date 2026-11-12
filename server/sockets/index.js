@@ -22,9 +22,10 @@ function sendResult(socket, acknowledgement, error) {
   else if (error) socket.emit('socketError', result);
 }
 
-export function attachSocketServer(httpServer, app, { path = '/socket.io' } = {}) {
+export function attachSocketServer(httpServer, app, { path = '/socket.io', addTrailingSlash = true } = {}) {
   const io = new Server(httpServer, {
     path,
+    addTrailingSlash,
     cors: { origin: config.corsOrigins, credentials: true },
     maxHttpBufferSize: 1e5,
   });

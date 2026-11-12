@@ -5,6 +5,7 @@ import { createApp } from '../server/app.js';
 import { connectDatabase } from '../server/config/database.js';
 import { assertConfig, config } from '../server/config/env.js';
 import { createServerlessDemoSimulator } from '../server/services/serverlessDemoSimulator.js';
+import { installVercelSocketRouting } from '../server/services/vercelSocketRouting.js';
 import { attachSocketServer } from '../server/sockets/index.js';
 
 assertConfig();
@@ -20,8 +21,10 @@ const app = createApp({
   requestPathPrefix: '/api/server',
 });
 
-const server = createServer(app);
-const io = attachSocketServer(server, app, { path: '/api/server/socket.io' });
+const server = createServer();
+const socketPath = '/api/server/socket.io';
+const io = attachSocketServer(server, app, { path: socketPath, addTrailingSlash: false });
+installVercelSocketRouting(server, app, io, socketPath);
 const socketEvents = mongoose.connection.db.collection('resq_socket_events');
 await socketEvents.createIndex({ createdAt: 1 }, { expireAfterSeconds: 300 });
 io.adapter(createAdapter(socketEvents, { addCreatedAtField: true }));

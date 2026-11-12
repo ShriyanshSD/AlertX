@@ -14,6 +14,7 @@ const mongoose = (await import('mongoose')).default;
 const { createApp } = await import('../app.js');
 const { attachSocketServer } = await import('../sockets/index.js');
 const { createDemoSimulator } = await import('../services/demoSimulator.js');
+const { installVercelSocketRouting } = await import('../services/vercelSocketRouting.js');
 const User = (await import('../models/User.js')).default;
 const Vehicle = (await import('../models/Vehicle.js')).default;
 const SOS = (await import('../models/SOS.js')).default;
@@ -466,6 +467,46 @@ const suite = describe('ResQ API and real-time services', () => {
       .get('/api/server?__vercel_path=%2Fapi%2Fhealth&probe=preserved');
     assert.equal(response.status, 200);
     assert.equal(response.body.data.status, 'ok');
+  });
+
+  it('routes rewritten Vercel Socket.IO traffic before Express handles it', async () => {
+    const vercelApp = createApp({ simulator, requestPathPrefix: '/api/server' });
+    const vercelServer = createServer();
+    const socketPath = '/api/server/socket.io';
+    const vercelIo = attachSocketServer(vercelServer, vercelApp, {
+      path: socketPath,
+      addTrailingSlash: false,
+    });
+    installVercelSocketRouting(vercelServer, vercelApp, vercelIo, socketPath);
+    await new Promise((resolve) => vercelServer.listen(0, '127.0.0.1', resolve));
+
+    const client = createSocketClient(`http://127.0.0.1:${vercelServer.address().port}`, {
+      path: '/api/server',
+      addTrailingSlash: false,
+      query: { __vercel_path: socketPath },
+      transports: ['websocket'],
+      extraHeaders: { Cookie: cookies.admin },
+      reconnection: false,
+    });
+    try {
+      await new Promise((resolve, reject) => {
+        client.once('connect', resolve);
+        client.once('connect_error', reject);
+      });
+      const joined = await new Promise((resolve) => {
+        client.emit('joinTrackingRoom', { type: 'admin' }, resolve);
+      });
+      assert.deepEqual(joined, { ok: true });
+
+      const health = await request(vercelServer)
+        .get('/api/server?__vercel_path=%2Fapi%2Fhealth');
+      assert.equal(health.status, 200);
+      assert.equal(health.body.data.status, 'ok');
+    } finally {
+      client.disconnect();
+      await new Promise((resolve) => vercelIo.close(resolve));
+      if (vercelServer.listening) await new Promise((resolve) => vercelServer.close(resolve));
+    }
   });
 
   it('moves demo vehicles for connected serverless clients and records demo history', async () => {

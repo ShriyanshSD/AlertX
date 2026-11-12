@@ -15,6 +15,7 @@ import aiRoutes from './routes/aiRoutes.js';
 import resourceRoutes from './routes/resourceRoutes.js';
 import { createDemoSimulator } from './services/demoSimulator.js';
 import { createGeminiService } from './services/geminiService.js';
+import { getVercelRequestPath } from './utils/vercelRequestPath.js';
 
 export function createApp({
   simulator,
@@ -31,11 +32,9 @@ export function createApp({
   if (trustProxy) app.set('trust proxy', 1);
   if (requestPathPrefix) {
     app.use((request, _response, next) => {
-      const requestUrl = new URL(request.url, 'http://localhost');
-      const rewrittenPath = requestUrl.searchParams.get('__vercel_path');
-      if (rewrittenPath === '/api' || rewrittenPath?.startsWith('/api/')) {
-        requestUrl.searchParams.delete('__vercel_path');
-        request.url = `${rewrittenPath}${requestUrl.search}`;
+      const rewrittenPath = getVercelRequestPath(request.url);
+      if (rewrittenPath) {
+        request.url = rewrittenPath;
       } else if (request.url === `${requestPathPrefix}/api`
         || request.url.startsWith(`${requestPathPrefix}/api/`)) {
         request.url = request.url.slice(requestPathPrefix.length);

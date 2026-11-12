@@ -10,6 +10,7 @@ function getSocket() {
     sharedSocket = io(url, {
       path: import.meta.env.VITE_SOCKET_PATH
         || (import.meta.env.PROD ? '/api/server/socket.io' : '/socket.io'),
+      addTrailingSlash: !import.meta.env.PROD,
       ...(import.meta.env.PROD ? { transports: ['websocket'] } : {}),
       withCredentials: true,
       autoConnect: true,
