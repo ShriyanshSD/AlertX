@@ -16,13 +16,28 @@ import resourceRoutes from './routes/resourceRoutes.js';
 import { createDemoSimulator } from './services/demoSimulator.js';
 import { createGeminiService } from './services/geminiService.js';
 
-export function createApp({ simulator, aiService } = {}) {
+export function createApp({
+  simulator,
+  aiService,
+  trustProxy = false,
+  requestPathPrefix,
+} = {}) {
   const app = express();
   const activeSimulator = simulator || createDemoSimulator({
     intervalMs: config.demoGpsIntervalMs,
     historyIntervalMs: config.locationHistoryIntervalMs,
   });
   app.disable('x-powered-by');
+  if (trustProxy) app.set('trust proxy', 1);
+  if (requestPathPrefix) {
+    app.use((request, _response, next) => {
+      if (request.url === `${requestPathPrefix}/api`
+        || request.url.startsWith(`${requestPathPrefix}/api/`)) {
+        request.url = request.url.slice(requestPathPrefix.length);
+      }
+      next();
+    });
+  }
   app.set('demoSimulator', activeSimulator);
   app.set('geminiService', aiService || createGeminiService({
     apiKey: config.geminiApiKey,

@@ -4,27 +4,22 @@ ResQ is a demonstration project, not an emergency dispatch service. Deploying it
 
 ## 1. Configure services
 
-- Provision MongoDB and create a dedicated application database/user. Restrict network access to the application host.
-- Deploy the Node API on a host that supports long-lived HTTP connections and WebSocket upgrades for Socket.IO.
-- Deploy the Vite frontend to Vercel using the included `vercel.json`.
-- Use Node.js 22.x for the Vercel build; the project dependencies require Node.js 20.19 or newer.
-- Vercel Functions now support WebSockets in public beta, but this API is currently started as a long-lived server and its simulator and Socket.IO room broadcasts are process-local. This project is not yet adapted for Vercel's function lifecycle or cross-instance fan-out, so keep the API on a persistent Node host for this deployment. A Vercel API migration would need function entry points, simulator lifecycle changes, and shared Socket.IO pub/sub.
-- In Vercel Project Settings → Environment Variables, set `VITE_API_URL` to the API base URL ending in `/api` (for example, `https://api.example.com/api`) and `VITE_SOCKET_URL` to the API origin (for example, `https://api.example.com`). These values are public build-time URLs, not secrets. Set them for each Vercel environment and redeploy after changing them.
-- Set the API host's `CORS_ORIGINS` to the exact HTTPS frontend origin. Keep the frontend and API on the same site, preferably with custom domains such as `app.example.com` and `api.example.com`. The API uses `HttpOnly`, `SameSite=Lax` cookies; unrelated default domains such as `*.vercel.app` and `*.onrender.com` are cross-site, so browser authentication cookies may not be sent. Do not switch to `SameSite=None` without adding and reviewing CSRF protections.
-- Vercel preview URLs are distinct origins. Add only the exact preview origins you intend to use to `CORS_ORIGINS`, and use a same-site custom preview domain if you need authenticated preview deployments.
+- Create a MongoDB Atlas database and a dedicated application user. The Socket.IO Mongo adapter uses change streams, so the database must be an Atlas replica set (the standard Atlas deployment type).
+- Import this repository into Vercel with the repository root as the project root. The included `vercel.json` sends `/api/*` to the shared Node function and keeps React Router routes on the SPA.
+- Leave `VITE_API_URL` and `VITE_SOCKET_URL` unset for this all-Vercel deployment. The frontend uses same-origin `/api` requests and `/api/server/socket.io` WebSockets. If either variable was added for an older external API, remove it and redeploy. `VITE_SOCKET_PATH` is optional and normally unset.
+- Set `CORS_ORIGINS` to the exact HTTPS production frontend origin, without a trailing slash. Vercel's generated `VERCEL_URL` is allowed automatically for preview deployments; add a custom production domain explicitly.
+- Production authentication uses secure `HttpOnly`, `SameSite=Lax` cookies. Keeping the frontend and API on the same Vercel origin avoids cross-site cookie issues. Do not change to `SameSite=None` without adding and reviewing CSRF protections.
 
 ## 2. Configure backend environment
 
-Set environment variables in the hosting provider's secret manager; do not commit a populated `.env` file.
+In Vercel Project Settings → Environment Variables, set the backend values for Production and any Preview environments where needed. Do not commit a populated `.env` file.
 
-- `NODE_ENV=production`
-- `PORT` to the port assigned by the host.
-- `MONGODB_URI` to the production database connection string.
+- `MONGODB_URI` to the Atlas connection string.
 - `JWT_SECRET` to a unique random value of at least 32 characters. Generate it locally with `node -e "console.log(require('node:crypto').randomBytes(48).toString('base64'))"`.
-- `CORS_ORIGINS` to the exact HTTPS frontend origin(s), without a trailing slash.
-- `COOKIE_SECURE=true` when serving over HTTPS (the production default).
-- Optionally set `GEMINI_API_KEY` and `GEMINI_MODEL` for server-side AI responses. Keep the key out of `VITE_*` variables.
-- Keep demo mode enabled only for demonstrations. Do not mix demo and real fleet data; demo SOS assignment is constrained to demo vehicles.
+- `CORS_ORIGINS` to the exact HTTPS production frontend origin.
+- `COOKIE_SECURE=true`.
+- `DEMO_MODE=true` for a college demonstration. Demo SOS assignment is constrained to demo vehicles.
+- Optionally set `GEMINI_API_KEY` and `GEMINI_MODEL` for server-side AI responses. Never put the key in a `VITE_*` variable.
 
 Never use the test database for deployment. `npm test` drops the isolated `resq_phase2_test` database configured by the test file.
 
@@ -33,16 +28,18 @@ Never use the test database for deployment. `npm test` drops the isolated `resq_
 1. Install the locked project dependencies with `npm ci`.
 2. To seed only the assistant knowledge base, run `npm run seed:knowledge` with the production database environment configured. This idempotently upserts the documented knowledge records.
 3. Use `npm run seed` only when intentionally creating the four environment-configured demo accounts, vehicles, SOS records, and contacts.
-4. Start the API with `npm start`.
-5. For Vercel, import the Git repository, keep the project root at the repository root, and use the included Vite build/output settings. The SPA rewrite serves `index.html` for React Router routes. Configure the two `VITE_*` URLs before deploying.
-6. For a non-Vercel frontend host, build with `npm run build` and serve `dist/` with SPA history fallback enabled.
-7. Route `/api/*` and `/socket.io/*` to the API only when using a same-origin reverse proxy. Preserve WebSocket upgrade headers for Socket.IO.
+4. For local backend development, run `npm start`. For Vercel, push the changes and deploy the repository; Vercel builds the Vite frontend and discovers `api/server.js` as the shared API/WebSocket function.
+5. After setting environment variables, redeploy and check `https://<your-domain>/api/health`. It should return JSON, not the SPA HTML.
+6. Log in and verify Socket.IO from the browser. The client uses WebSocket transport and reconnects/resubscribes when Vercel closes a connection at the function duration limit.
 
 ## 4. Operational checks
 
-- Verify `GET /api/health`, login, an authenticated API request, and a Socket.IO connection.
+- Verify `GET /api/health` returns JSON, then test login, an authenticated API request, and a Socket.IO connection.
 - Check that HTTPS cookies are `HttpOnly`, `Secure`, and `SameSite=Lax`.
-- Confirm the browser can reach the configured API and Socket.IO endpoints; do not enable wildcard credentialed CORS.
+- Confirm the browser connects to `/api/server/socket.io`; do not enable wildcard credentialed CORS.
+- Configure Vercel Firewall rate limits for public API routes. The Express rate limiter is process-local and does not share counters between serverless instances.
+- The demo simulator stores its running state in MongoDB and coordinates ticks with a database lease. Vehicle movement runs while an authenticated Socket.IO connection is active; reconnecting clients reload and resubscribe.
+- The MongoDB Socket.IO adapter shares events between function instances and expires adapter events after five minutes. MongoDB change streams must be available.
 - Monitor API, database, Gemini, and Overpass failures without logging authorization headers, API keys, chat text, or precise location coordinates.
 - Gemini is optional; when unavailable, the assistant uses relevant cited documents or reports that no reliable knowledge-base result was found.
 - OpenStreetMap Overpass is an external community service with availability and usage limits. The application shows a fallback message if it cannot be reached.

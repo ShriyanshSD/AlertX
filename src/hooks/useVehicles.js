@@ -37,13 +37,15 @@ export default function useVehicles() {
     }
 
     let active = true;
-    api.get('/vehicles')
+    let hasConnected = false;
+    const loadVehicles = () => api.get('/vehicles')
       .then(({ data }) => {
         if (active) setVehicles(data.data.vehicles.map(toUiVehicle));
       })
       .catch((requestError) => {
         if (active) setError(getApiError(requestError));
       });
+    loadVehicles();
 
     const socket = connectRealtime();
     const roomType = user.role === 'admin' ? 'admin' : ['operator'].includes(user.role) ? 'operations' : 'user';
@@ -57,6 +59,8 @@ export default function useVehicles() {
     };
     const joinTrackingRoom = () => {
       if (active) setError('');
+      if (hasConnected) loadVehicles();
+      hasConnected = true;
       if (roomType === 'user') return;
       socket.emit('joinTrackingRoom', { type: roomType }, (result) => {
         if (active && result?.error) setError(`Live updates unavailable: ${result.error}`);

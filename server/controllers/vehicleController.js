@@ -59,10 +59,10 @@ export const nearbyVehicles = asyncHandler(async (request, response) => {
   });
 });
 
-export const simulationStatus = (request, response) => {
+export const simulationStatus = asyncHandler(async (request, response) => {
   const simulator = request.app.get('demoSimulator');
-  response.json({ data: { ...simulator.getState(), enabled: true } });
-};
+  response.json({ data: { ...await simulator.getState(), enabled: true } });
+});
 
 export const createVehicle = asyncHandler(async (request, response) => {
   if (request.body.operatorId) {

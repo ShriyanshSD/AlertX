@@ -20,6 +20,7 @@ const SOS = (await import('../models/SOS.js')).default;
 const Contact = (await import('../models/Contact.js')).default;
 const EmergencyAlert = (await import('../models/EmergencyAlert.js')).default;
 const LocationHistory = (await import('../models/LocationHistory.js')).default;
+const { createServerlessDemoSimulator } = await import('../services/serverlessDemoSimulator.js');
 const KnowledgeDocument = (await import('../models/KnowledgeDocument.js')).default;
 const AIConversation = (await import('../models/AIConversation.js')).default;
 const AIActivity = (await import('../models/AIActivity.js')).default;
@@ -446,6 +447,72 @@ const suite = describe('ResQ API and real-time services', () => {
     assert.ok(moved.currentLocation.coordinates[0] >= 77.438 && moved.currentLocation.coordinates[0] <= 77.469);
     assert.ok(moved.currentLocation.coordinates[1] >= 28.658 && moved.currentLocation.coordinates[1] <= 28.684);
     assert.ok(await LocationHistory.exists({ vehicleId: farVehicle._id, isDemo: true }));
+  });
+
+  it('shares serverless simulator control state through MongoDB', async () => {
+    const firstInstance = createServerlessDemoSimulator({ intervalMs: 2000 });
+    const secondInstance = createServerlessDemoSimulator({ intervalMs: 2000 });
+    await secondInstance.stop();
+
+    assert.equal((await firstInstance.start()).running, true);
+    assert.equal((await secondInstance.getState()).running, true);
+    assert.equal((await secondInstance.stop()).running, false);
+    assert.equal((await firstInstance.getState()).running, false);
+  });
+
+  it('serves rewritten Vercel API paths through the shared Express app', async () => {
+    const vercelApp = createApp({ simulator, requestPathPrefix: '/api/server' });
+    const response = await request(vercelApp).get('/api/server/api/health');
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.status, 'ok');
+  });
+
+  it('moves demo vehicles for connected serverless clients and records demo history', async () => {
+    const serverlessSimulator = createServerlessDemoSimulator({
+      intervalMs: 200,
+      historyIntervalMs: 200,
+    });
+    serverlessSimulator.setIo(io);
+    await serverlessSimulator.stop();
+    await Vehicle.findByIdAndUpdate(farVehicle._id, {
+      $set: { status: 'en_route', speed: 40, heading: 90 },
+    });
+    const before = (await Vehicle.findById(farVehicle._id)).currentLocation.coordinates;
+    const client = createSocketClient(baseUrl, {
+      transports: ['websocket'],
+      extraHeaders: { Cookie: cookies.admin },
+      reconnection: false,
+    });
+    try {
+      await new Promise((resolve, reject) => {
+        client.once('connect', resolve);
+        client.once('connect_error', reject);
+      });
+      const joined = await new Promise((resolve) => {
+        client.emit('joinTrackingRoom', { type: 'admin' }, resolve);
+      });
+      assert.deepEqual(joined, { ok: true });
+
+      const locationUpdate = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Serverless demo GPS update was not broadcast.')), 1500);
+        client.once('vehicleLocationUpdated', (event) => {
+          clearTimeout(timer);
+          resolve(event);
+        });
+      });
+      await serverlessSimulator.start();
+      const event = await locationUpdate;
+      assert.equal(event.vehicle.vehicleId, 'AMB-FAR');
+      assert.equal(event.isDemo, true);
+      assert.notDeepEqual(
+        (await Vehicle.findById(farVehicle._id)).currentLocation.coordinates,
+        before,
+      );
+      assert.ok(await LocationHistory.exists({ vehicleId: farVehicle._id, isDemo: true }));
+    } finally {
+      await serverlessSimulator.stop();
+      client.disconnect();
+    }
   });
 
   it('authenticates sockets and rejects unauthorized tracking rooms and demo GPS writes', async () => {

@@ -81,25 +81,25 @@ export const analytics = asyncHandler(async (request, response) => {
   });
 });
 
-export const simulationStatus = (request, response) => {
+export const simulationStatus = asyncHandler(async (request, response) => {
   const simulator = request.app.get('demoSimulator');
-  response.json({ data: { ...simulator.getState(), enabled: true } });
-};
+  response.json({ data: { ...await simulator.getState(), enabled: true } });
+});
 
-export const startSimulation = (request, response) => {
+export const startSimulation = asyncHandler(async (request, response) => {
   const simulator = request.app.get('demoSimulator');
-  simulator.start();
-  response.json({ data: simulator.getState() });
-};
+  await simulator.start();
+  response.json({ data: await simulator.getState() });
+});
 
-export const stopSimulation = (request, response) => {
+export const stopSimulation = asyncHandler(async (request, response) => {
   const simulator = request.app.get('demoSimulator');
-  simulator.stop();
-  response.json({ data: simulator.getState() });
-};
+  await simulator.stop();
+  response.json({ data: await simulator.getState() });
+});
 
 export const resetSimulation = asyncHandler(async (request, response) => {
   const simulator = request.app.get('demoSimulator');
   await simulator.reset();
-  response.json({ data: { ...simulator.getState(), reset: true } });
+  response.json({ data: { ...await simulator.getState(), reset: true } });
 });

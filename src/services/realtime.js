@@ -8,9 +8,12 @@ function getSocket() {
   if (!sharedSocket) {
     const url = import.meta.env.VITE_SOCKET_URL || undefined;
     sharedSocket = io(url, {
+      path: import.meta.env.VITE_SOCKET_PATH
+        || (import.meta.env.PROD ? '/api/server/socket.io' : '/socket.io'),
+      ...(import.meta.env.PROD ? { transports: ['websocket'] } : {}),
       withCredentials: true,
       autoConnect: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity,
       timeout: 8000,
     });
   } else if (!sharedSocket.connected) {
