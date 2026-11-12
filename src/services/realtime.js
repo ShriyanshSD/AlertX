@@ -6,12 +6,13 @@ let generation = 0;
 
 function getSocket() {
   if (!sharedSocket) {
+    const isProductionBuild = import.meta.env.MODE === 'production';
     const url = import.meta.env.VITE_SOCKET_URL || undefined;
     sharedSocket = io(url, {
       path: import.meta.env.VITE_SOCKET_PATH
-        || (import.meta.env.PROD ? '/api/server/socket.io' : '/socket.io'),
-      addTrailingSlash: !import.meta.env.PROD,
-      ...(import.meta.env.PROD ? { transports: ['websocket'] } : {}),
+        || (isProductionBuild ? '/api/server/socket.io' : '/socket.io'),
+      addTrailingSlash: !isProductionBuild,
+      ...(isProductionBuild ? { transports: ['websocket'] } : {}),
       withCredentials: true,
       autoConnect: true,
       reconnectionAttempts: Infinity,
