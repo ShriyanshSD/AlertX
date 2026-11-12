@@ -460,7 +460,7 @@ const suite = describe('ResQ API and real-time services', () => {
     assert.equal((await firstInstance.getState()).running, false);
   });
 
-  it('serves rewritten Vercel API paths through the shared Express app', async () => {
+  it('serves rewritten Vercel API paths through the shared catch-all function', async () => {
     const vercelApp = createApp({ simulator, requestPathPrefix: '/api/server' });
     const response = await request(vercelApp).get('/api/server/api/health');
     assert.equal(response.status, 200);
