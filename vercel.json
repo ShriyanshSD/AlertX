@@ -5,8 +5,12 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api",
+      "destination": "/api/server?__vercel_path=/api"
+    },
+    {
       "source": "/api/:path*",
-      "destination": "/api/server/api/:path*"
+      "destination": "/api/server?__vercel_path=/api/:path*"
     },
     {
       "source": "/(.*)",

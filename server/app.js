@@ -31,7 +31,12 @@ export function createApp({
   if (trustProxy) app.set('trust proxy', 1);
   if (requestPathPrefix) {
     app.use((request, _response, next) => {
-      if (request.url === `${requestPathPrefix}/api`
+      const requestUrl = new URL(request.url, 'http://localhost');
+      const rewrittenPath = requestUrl.searchParams.get('__vercel_path');
+      if (rewrittenPath === '/api' || rewrittenPath?.startsWith('/api/')) {
+        requestUrl.searchParams.delete('__vercel_path');
+        request.url = `${rewrittenPath}${requestUrl.search}`;
+      } else if (request.url === `${requestPathPrefix}/api`
         || request.url.startsWith(`${requestPathPrefix}/api/`)) {
         request.url = request.url.slice(requestPathPrefix.length);
       }

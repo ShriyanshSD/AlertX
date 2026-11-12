@@ -5,7 +5,7 @@ ResQ is a demonstration project, not an emergency dispatch service. Deploying it
 ## 1. Configure services
 
 - Create a MongoDB Atlas database and a dedicated application user. The Socket.IO Mongo adapter uses change streams, so the database must be an Atlas replica set (the standard Atlas deployment type). Allow Vercel's outbound connections in Atlas Network Access; without that, the API function cannot start.
-- Import this repository into Vercel with the repository root as the project root. The included `vercel.json` rewrites `/api/*` to the shared catch-all Node function and keeps React Router routes on the SPA.
+- Import this repository into Vercel with the repository root as the project root. The included `vercel.json` rewrites `/api/*` to the shared Node function and keeps React Router routes on the SPA.
 - Leave `VITE_API_URL` and `VITE_SOCKET_URL` unset for this all-Vercel deployment. The frontend uses same-origin `/api` requests and `/api/server/socket.io` WebSockets. If either variable was added for an older external API, remove it and redeploy. `VITE_SOCKET_PATH` is optional and normally unset.
 - Set `CORS_ORIGINS` to the exact HTTPS production frontend origin, without a trailing slash. Vercel's generated `VERCEL_URL` is allowed automatically for preview deployments; add a custom production domain explicitly.
 - Production authentication uses secure `HttpOnly`, `SameSite=Lax` cookies. Keeping the frontend and API on the same Vercel origin avoids cross-site cookie issues. Do not change to `SameSite=None` without adding and reviewing CSRF protections.
@@ -28,7 +28,7 @@ Never use the test database for deployment. `npm test` drops the isolated `resq_
 1. Install the locked project dependencies with `npm ci`.
 2. To seed only the assistant knowledge base, run `npm run seed:knowledge` with the production database environment configured. This idempotently upserts the documented knowledge records.
 3. Use `npm run seed` only when intentionally creating the four environment-configured demo accounts, vehicles, SOS records, and contacts.
-4. For local backend development, run `npm start`. For Vercel, push the changes and deploy the repository; Vercel builds the Vite frontend and discovers `api/[...path].js` as the shared API/WebSocket function.
+4. For local backend development, run `npm start`. For Vercel, push the changes and deploy the repository; Vercel builds the Vite frontend and discovers `api/server.js` as the shared API/WebSocket function.
 5. After setting environment variables, redeploy and check `https://<your-domain>/api/health`. It should return JSON, not the SPA HTML.
 6. Log in and verify Socket.IO from the browser. The client uses WebSocket transport and reconnects/resubscribes when Vercel closes a connection at the function duration limit.
 
