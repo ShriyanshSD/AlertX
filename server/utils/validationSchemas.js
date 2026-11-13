@@ -55,8 +55,20 @@ export const sosSchemas = {
   create: z.object({
     emergencyType: z.enum(['medical', 'fire', 'accident', 'personal_safety', 'other']),
     description: z.string().trim().max(1000).optional().default(''),
+    locationLabel: z.string().trim().max(120).optional().default(''),
     location: coordinates,
+    reportedFor: z.enum(['self', 'other']).optional().default('self'),
+    personName: z.string().trim().max(100).optional().default(''),
+    personRelationship: z.string().trim().max(50).optional().default(''),
     alertContactIds: z.array(objectId).max(20).optional().default([]),
+  }).superRefine((request, context) => {
+    if (request.reportedFor === 'other' && request.personName.length < 2) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Enter the name of the person who needs help.',
+        path: ['personName'],
+      });
+    }
   }),
   id: z.object({ sosId: z.string().trim().min(5).max(60) }),
   status: z.object({ status: z.enum(['assigned', 'responding', 'resolved']) }),

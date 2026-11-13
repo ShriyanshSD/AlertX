@@ -435,10 +435,27 @@ const suite = describe('ResQ API and real-time services', () => {
     assert.equal(forbiddenNearby.status, 403);
   });
 
-  it('creates an SOS, assigns the nearest eligible vehicle, and records consent-aware alerts', async () => {
+  it('requires a beneficiary name when an SOS is for someone else', async () => {
     const response = await userAgent.post('/api/sos').send({
       emergencyType: 'medical',
       location: { lat: 28.6702, lng: 77.4524 },
+      reportedFor: 'other',
+      personName: ' ',
+    });
+    assert.equal(response.status, 400);
+    assert.ok(response.body.error.details.body.some((issue) => (
+      issue.path === 'personName' && /person who needs help/i.test(issue.message)
+    )));
+  });
+
+  it('creates an SOS, assigns the nearest eligible vehicle, and records consent-aware alerts', async () => {
+    const response = await userAgent.post('/api/sos').send({
+      emergencyType: 'medical',
+      location: { lat: 28.6752, lng: 77.4624 },
+      locationLabel: 'North entrance, sample clinic',
+      reportedFor: 'other',
+      personName: 'Jordan Friend',
+      personRelationship: 'Friend',
       alertContactIds: [String(contact._id)],
     });
 
@@ -452,12 +469,24 @@ const suite = describe('ResQ API and real-time services', () => {
       assert.equal(response.body.data.sos.emergencyType, 'other');
       assert.equal(response.body.data.sos.priority, 'medium');
       assert.equal(response.body.data.sos.status, 'Pending');
+      assert.equal(response.body.data.sos.reportedFor, 'self');
+      assert.equal(response.body.data.sos.personName, '');
       assert.equal(response.body.data.sos.assignedVehicle, null);
     });
     assert.equal(response.status, 201);
     assert.equal(response.body.data.sos.priority, 'critical');
     assert.equal(response.body.data.sos.assignedVehicle, 'AMB-NEAR');
     assert.equal(response.body.data.sos.status, 'Assigned');
+    assert.equal(response.body.data.sos.reportedFor, 'other');
+    assert.equal(response.body.data.sos.personName, 'Jordan Friend');
+    assert.equal(response.body.data.sos.personRelationship, 'Friend');
+    assert.equal(response.body.data.sos.location, 'North entrance, sample clinic');
+    assert.equal(response.body.data.sos.lat, 28.6752);
+    assert.equal(response.body.data.sos.lng, 77.4624);
+    const storedSos = await SOS.findOne({ sosId: response.body.data.sos.sosId });
+    assert.equal(storedSos.reportedFor, 'other');
+    assert.equal(storedSos.personName, 'Jordan Friend');
+    assert.equal(storedSos.locationLabel, 'North entrance, sample clinic');
     assert.equal(response.body.data.sos.alertContacts[0].status, 'consent_required');
     createdSosId = response.body.data.sos.sosId;
     const userFleet = await userAgent.get('/api/vehicles');
@@ -827,6 +856,13 @@ const suite = describe('ResQ API and real-time services', () => {
             resolve(event);
           });
         });
+        const adminSosCreated = new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('Admin SOS notification was not delivered.')), 1500);
+          client.once('sosCreated', (event) => {
+            clearTimeout(timer);
+            resolve(event);
+          });
+        });
         const fleetChanged = new Promise((resolve, reject) => {
           const timer = setTimeout(() => reject(new Error('Fleet update was not broadcast to user dashboards.')), 1500);
           untrustedClient.once('fleetUpdated', () => {
@@ -848,11 +884,19 @@ const suite = describe('ResQ API and real-time services', () => {
         const created = await userAgent.post('/api/sos').send({
           emergencyType: 'medical',
           location: { lat: 28.6702, lng: 77.4524 },
+          locationLabel: 'Manual map pin',
+          reportedFor: 'other',
+          personName: 'Socket Test Relative',
+          personRelationship: 'Sibling',
           alertContactIds: [String(contact._id)],
         });
         assert.equal(created.status, 201);
         const event = await notification;
         assert.equal(event.status, 'consent_required');
+        const adminEvent = await adminSosCreated;
+        assert.equal(adminEvent.sosId, created.body.data.sos.sosId);
+        assert.equal(adminEvent.personName, 'Socket Test Relative');
+        assert.equal(adminEvent.location, 'Manual map pin');
 
         const statusChange = new Promise((resolve, reject) => {
           const timer = setTimeout(() => reject(new Error('Vehicle status notification was not delivered.')), 1500);

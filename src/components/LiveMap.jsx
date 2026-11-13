@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { CircleMarker, MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Crosshair } from 'lucide-react';
@@ -12,6 +12,12 @@ const facilityStyles = {
   'Fire station': { color: '#ff794f', glyph: 'F' },
   'Ambulance station': { color: '#42c9bd', glyph: 'A' },
 };
+const currentLocationIcon = L.divIcon({
+  className: 'user-location-marker',
+  html: '<span class="user-location-pin"></span>',
+  iconSize: [26, 26],
+  iconAnchor: [13, 13],
+});
 
 function MapFocus({ center }) {
   const map = useMap();
@@ -21,14 +27,34 @@ function MapFocus({ center }) {
   return null;
 }
 
-function MapHomeControl() {
+function MapUserLocationControl({ onLocation, onError, locating, setLocating }) {
   const map = useMap();
-  useEffect(() => {
-    const goHome = () => map.flyTo([28.6719, 77.4538], 14, { duration: 0.8 });
-    document.addEventListener('resq-map-home', goHome);
-    return () => document.removeEventListener('resq-map-home', goHome);
-  }, [map]);
-  return null;
+  const locateUser = () => {
+    if (!navigator.geolocation) {
+      onError('Your browser does not support location sharing.');
+      return;
+    }
+    onError('');
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
+      const location = [coords.latitude, coords.longitude];
+      onLocation(location);
+      map.flyTo(location, 16, { duration: 0.8 });
+      setLocating(false);
+    }, (error) => {
+      onError(error.code === 1
+        ? 'Location permission was denied. Allow location access and try again.'
+        : 'Your current location could not be determined. Try again.');
+      setLocating(false);
+    }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+  };
+  return <button
+    className="map-locate"
+    aria-label={locating ? 'Finding your current location' : 'Show my current location'}
+    title={locating ? 'Finding location…' : 'Show my current location'}
+    onClick={locateUser}
+    disabled={locating}
+  ><Crosshair size={16} /></button>;
 }
 
 export function VehicleMarker({ vehicle, selected, onSelect }) {
@@ -62,18 +88,22 @@ function FacilityMarker({ facility }) {
 
 export default function LiveMap({ vehicles = [], contacts = [], sosRequests = [], resources = [], showVehicles = true, showContacts = true, selectedId, onSelectVehicle, focus, label = 'SIMULATED FEED' }) {
   const center = [28.6719, 77.4538];
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [locationError, setLocationError] = useState('');
+  const [locating, setLocating] = useState(false);
   return <div className="map-shell">
     <MapContainer center={center} zoom={14} scrollWheelZoom className="live-map">
       <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       <MapFocus center={focus} />
-      <MapHomeControl />
+      <MapUserLocationControl onLocation={setCurrentLocation} onError={setLocationError} locating={locating} setLocating={setLocating} />
+      {currentLocation && <Marker position={currentLocation} icon={currentLocationIcon}><Popup>Your current device location</Popup></Marker>}
       {showVehicles && vehicles.map((vehicle) => <VehicleMarker key={vehicle.id} vehicle={vehicle} selected={selectedId === vehicle.id} onSelect={onSelectVehicle} />)}
       {showContacts && contacts.filter((contact) => Number.isFinite(contact.lat) && Number.isFinite(contact.lng)).map((contact) => <CircleMarker key={contact.contactId || contact.id} center={[contact.lat, contact.lng]} radius={7} pathOptions={{ color: colors.Contact, fillColor: colors.Contact, fillOpacity: 0.9, weight: 2 }}><Popup><div className="map-popup"><strong>{contact.name}</strong><span>Trusted contact · {contact.id}</span></div></Popup></CircleMarker>)}
       {sosRequests.map((request) => <CircleMarker key={request.id} center={[request.lat, request.lng]} radius={9} pathOptions={{ color: colors.SOS, fillColor: colors.SOS, fillOpacity: 0.85, weight: 2 }}><Popup><div className="map-popup"><strong>{request.id} · {request.type}</strong><span>{request.priority} priority · {request.status}</span></div></Popup></CircleMarker>)}
       {resources.map((facility) => <FacilityMarker key={facility.id} facility={facility} />)}
     </MapContainer>
     <div className="map-overlay-label"><span className="live-dot" /> {label}</div>
-    <button className="map-locate" aria-label="Center map on Ghaziabad coverage area" title="Center map" onClick={() => document.dispatchEvent(new CustomEvent('resq-map-home'))}><Crosshair size={16} /></button>
+    {locationError && <p className="map-location-error" role="status">{locationError}</p>}
   </div>;
 }
 

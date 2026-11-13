@@ -188,6 +188,12 @@ h1, h2, h3, p { margin-top: 0; }
 .map-overlay-label .live-dot { width: 5px; height: 5px; }
 .map-locate { position: absolute; z-index: 500; right: 12px; bottom: 24px; display: grid; width: 31px; height: 31px; place-items: center; border: 1px solid #334455; border-radius: 7px; color: #dce8f5; background: #121d28e8; cursor: pointer; }
 .map-locate:hover { color: #fff; background: #25364a; }
+.map-locate:disabled { opacity: .65; cursor: wait; }
+.map-location-error { position: absolute; z-index: 500; right: 52px; bottom: 20px; max-width: min(320px, calc(100% - 70px)); margin: 0; padding: 8px 10px; border: 1px solid #67404a; border-radius: 6px; color: #ffabb3; background: #35232b; font-size: 9px; line-height: 1.4; }
+.user-location-marker, .sos-location-marker { border: 0; background: transparent; }
+.user-location-pin { position: relative; display: block; width: 20px; height: 20px; border: 3px solid white; border-radius: 50%; background: #4285f4; box-shadow: 0 1px 9px #07111cbd; }
+.user-location-pin::after { position: absolute; inset: -7px; border: 2px solid #4285f4a8; border-radius: 50%; content: ''; }
+.sos-location-pin { display: block; width: 24px; height: 24px; border: 2px solid white; border-radius: 50% 50% 50% 4px; background: #ff455e; box-shadow: 0 2px 8px #07111cbd; transform: rotate(-45deg); }
 .tracking-toolbar { display: flex; align-items: center; gap: 15px; margin-bottom: 13px; padding: 9px 12px; }
 .search-field { display: flex; min-width: 210px; align-items: center; gap: 8px; color: #8292a3; }
 .search-field input { width: 100%; min-width: 0; padding: 5px 0; border: 0; outline: 0; color: #e5ecf4; background: transparent; font-size: 10px; }
@@ -681,6 +687,22 @@ label { color: #aeb9c7; }
 .sos-description-label { display: grid; gap: 6px; margin-top: 12px; color: #aab8c7; font-size: 9px; }
 .sos-description-label textarea { width: 100%; min-height: 62px; resize: vertical; padding: 9px; border: 1px solid #344252; border-radius: 6px; color: #e5ebf2; background: #111a25; font: inherit; font-size: 10px; }
 .sos-description-label textarea:focus { border-color: #568fff; outline: 2px solid #4f8cff19; }
+.sos-modal { width: min(100%, 560px); }
+.sos-request-for { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 10px; padding: 9px 10px; border: 1px solid #2e3c4c; border-radius: 7px; }
+.sos-request-for legend { padding: 0 4px; color: #aab8c7; font-size: 9px; }
+.sos-request-for label { display: inline-flex; align-items: center; gap: 6px; color: #d4dfeb; font-size: 9px; cursor: pointer; }
+.sos-request-for input { accent-color: #4f8cff; }
+.sos-person-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 11px; }
+.sos-person-fields label, .sos-location-description { display: grid; gap: 5px; color: #aab8c7; font-size: 9px; }
+.sos-person-fields select, .sos-person-fields input, .sos-location-description input { width: 100%; min-height: 34px; padding: 0 8px; border: 1px solid #344252; border-radius: 6px; color: #e5ebf2; background: #111a25; font: inherit; font-size: 9px; }
+.sos-person-fields > small { grid-column: 1 / -1; color: #8493a3; font-size: 8px; }
+.sos-service-label { display: block; margin: 8px 0; color: #aab8c7; font-size: 9px; }
+.sos-location-picker { margin-top: 9px; }
+.sos-location-map { width: 100%; height: 190px; overflow: hidden; border: 1px solid #344252; border-radius: 7px; background: #172531; }
+.sos-location-picker > small { display: block; margin-top: 5px; color: #8493a3; font-size: 8px; }
+.sos-location-guidance { margin: 7px 0 0; color: #f1bd76; font-size: 8px; line-height: 1.5; }
+.sos-location-description { margin-top: 9px; }
+.sos-person-relationship { color: #8d9bad; font-size: 8px; }
 .sos-location-box { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-top: 12px; padding: 10px; border: 1px solid #2e3c4c; border-radius: 7px; background: #121b26; }
 .sos-location-box > div { display: grid; min-width: 0; gap: 4px; }
 .sos-location-box strong { color: #dce5ef; font-size: 9px; }
@@ -733,6 +755,8 @@ label { color: #aeb9c7; }
   .filter-tabs { margin-right: -2px; margin-left: -2px; }
   .sos-location-box { align-items: flex-start; flex-direction: column; }
   .sos-location-box .button { width: 100%; }
+  .sos-person-fields { grid-template-columns: 1fr; }
+  .sos-person-fields > small { grid-column: auto; }
   .sos-detail-grid { grid-template-columns: 1fr; }
   .sos-detail-actions { flex-direction: column; }
   .sos-detail-actions .button { width: 100%; }

@@ -40,7 +40,7 @@ export default function useNotifications() {
       tone: 'orange',
     });
     const onSosCreated = (sos) => prependNotification(setItems, {
-      title: `New ${sos.type || 'emergency'} request`,
+      title: `New ${sos.type || 'emergency'} request${sos.reportedFor === 'other' && sos.personName ? ` for ${sos.personName}` : ''}`,
       detail: `${sos.sosId || sos.id} · ${sos.location || 'Location unavailable'}`,
       tone: 'red',
     });

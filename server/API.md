@@ -85,15 +85,21 @@ Create request example:
 ```json
 {
   "emergencyType": "medical",
-  "description": "Demo request",
+  "description": "Person needs help near the north entrance",
+  "locationLabel": "North entrance, sample clinic",
   "location": { "lat": 28.6702, "lng": 77.4524 },
+  "reportedFor": "other",
+  "personName": "Jordan Friend",
+  "personRelationship": "Friend",
   "alertContactIds": ["65a000000000000000000001"]
 }
 ```
 
-Emergency types: `medical`, `fire`, `accident`, `personal_safety`. Priorities are server-derived. SOS status transitions are constrained to `pending` → `assigned` → `responding` → `resolved`; a pending request may also be resolved. If no eligible vehicle is available, the SOS remains pending.
+Emergency types: `medical`, `fire`, `accident`, `personal_safety`, `other`. `reportedFor` defaults to `self`; when it is `other`, `personName` is required and `personRelationship` is optional. `location` must contain the selected latitude and longitude; `locationLabel` is an optional address or landmark. The map pin can be placed by clicking or dragging, and current-device location is opt-in. Priorities are server-derived. SOS status transitions are constrained to `pending` → `assigned` → `responding` → `resolved`; a pending request may also be resolved. If no eligible vehicle is available, the SOS remains pending.
 
 Selected contacts are scoped to the SOS owner's account. Alerts are recorded only for selected contacts, and recorded consent controls whether the alert status is `created` or `consent_required`. Only in-app demo records/events are produced; no external provider is called.
+
+Each created request is saved to the SOS collection and emits `sosCreated` to the admin, operations, and owning-user rooms. Admins receive the request's beneficiary and chosen location in the live notification. This is not a real emergency call or dispatch.
 
 ## Contacts
 

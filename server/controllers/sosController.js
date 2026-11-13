@@ -33,15 +33,27 @@ async function findAuthorizedSos(user, sosId) {
 }
 
 export const createSos = asyncHandler(async (request, response) => {
-  const { emergencyType, description, location, alertContactIds } = request.body;
+  const {
+    emergencyType,
+    description,
+    location,
+    locationLabel,
+    reportedFor,
+    personName,
+    personRelationship,
+    alertContactIds,
+  } = request.body;
   const sos = await SOS.create({
     sosId: `SOS-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}-${randomUUID().slice(0, 6).toUpperCase()}`,
     userId: request.user._id,
     emergencyType,
     priority: priorityForType[emergencyType],
     description,
+    reportedFor,
+    personName: reportedFor === 'other' ? personName : '',
+    personRelationship: reportedFor === 'other' ? personRelationship : '',
     location: toPoint(location),
-    locationLabel: config.demoMode ? 'Indirapuram, Ghaziabad' : '',
+    locationLabel: locationLabel || (config.demoMode ? 'Indirapuram, Ghaziabad' : ''),
     status: 'pending',
     isDemo: config.demoMode,
   });
