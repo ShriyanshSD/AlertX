@@ -69,6 +69,49 @@ function emergencyAnswer(type, documents) {
   return `${introduction}${guidance}`;
 }
 
+const stressFailureMessages = {
+  AUTH: 'Gemini rejected the request. Check the server API key and permissions.',
+  MODEL: 'The configured Gemini model is unavailable. Check the server model setting.',
+  QUOTA: 'Gemini quota or rate limits were reached. Try again later.',
+  BAD_REQUEST: 'Gemini rejected the assessment request. Check the server model configuration.',
+  TIMEOUT: 'Gemini did not respond in time. Please try again.',
+  NETWORK: 'AlertX could not reach Gemini. Check the server connection.',
+  SERVICE: 'Gemini is currently unavailable. Please try again later.',
+  INVALID_RESPONSE: 'Gemini returned an unreadable result. No assessment was produced.',
+  NO_CONTENT: 'Gemini returned no assessment. Please try again.',
+  HTTP_ERROR: 'Gemini rejected the assessment request.',
+  REQUEST_FAILED: 'AlertX could not complete the Gemini request.',
+};
+
+export const assessStress = asyncHandler(async (request, response) => {
+  const provider = request.app.get('geminiService');
+  if (typeof provider?.assessStress !== 'function') {
+    throw new AppError(503, 'The AI stress check-in is unavailable because Gemini is not configured.');
+  }
+
+  let result;
+  try {
+    result = await provider.assessStress({ answers: request.body.answers });
+  } catch (error) {
+    const knownCode = Object.hasOwn(stressFailureMessages, error?.code);
+    const code = knownCode ? error.code : 'UNKNOWN';
+    console.warn(`ResQ Gemini stress assessment failed (${code}).`);
+    throw new AppError(503, knownCode
+      ? stressFailureMessages[code]
+      : 'Gemini could not complete the AI stress check-in. Please try again later.');
+  }
+
+  if (!result) {
+    throw new AppError(503, 'The AI stress check-in is unavailable because Gemini is not configured.');
+  }
+  if (!['low', 'moderate', 'high'].includes(result.level)) {
+    console.warn('ResQ Gemini stress assessment failed (INVALID_RESPONSE).');
+    throw new AppError(502, 'Gemini returned an unreadable result. No assessment was produced.');
+  }
+
+  response.json({ data: { level: result.level } });
+});
+
 export const getConversation = asyncHandler(async (request, response) => {
   const conversation = await AIConversation.findOne({ userId: request.user._id }).lean();
   response.json({ data: { messages: conversation?.messages || [] } });

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createGeminiService } from '../services/geminiService.js';
 import { fetchNearbyFacilities } from '../services/nearbyResources.js';
-import { calculateStressScore, getStressLevel } from '../../src/services/stressAssessment.js';
 
 describe('Phase 3 service behavior', () => {
   it('uses the Gemini server client with retrieved context and no saved conversation', async () => {
@@ -97,6 +96,43 @@ describe('Phase 3 service behavior', () => {
     );
   });
 
+  it('sends only structured stress answers to Gemini and accepts only a broad supported level', async () => {
+    let requestBody;
+    const service = createGeminiService({
+      apiKey: 'test-key',
+      model: 'test-model',
+      fetchImpl: async (_url, options) => {
+        requestBody = JSON.parse(options.body);
+        return {
+          ok: true,
+          json: async () => ({ candidates: [{ content: { parts: [{ text: '{"level":"moderate"}' }] } }] }),
+        };
+      },
+    });
+
+    const answers = { scared: 2, confused: 1, overwhelmed: 0, focus: 2, tense: 1 };
+    assert.deepEqual(await service.assessStress({ answers }), { level: 'moderate' });
+    assert.match(requestBody.systemInstruction.parts[0].text, /non-clinical/);
+    assert.match(requestBody.systemInstruction.parts[0].text, /not a diagnosis/);
+    assert.match(requestBody.contents[0].parts[0].text, /Feeling scared: Yes/);
+    assert.match(requestBody.contents[0].parts[0].text, /Able to focus: Yes/);
+    assert.equal(requestBody.generationConfig.responseMimeType, 'application/json');
+    assert.doesNotMatch(JSON.stringify(requestBody), /account|history|email|name/i);
+
+    const invalid = createGeminiService({
+      apiKey: 'test-key',
+      model: 'test-model',
+      fetchImpl: async () => ({
+        ok: true,
+        json: async () => ({ candidates: [{ content: { parts: [{ text: '{"level":"critical"}' }] } }] }),
+      }),
+    });
+    await assert.rejects(
+      invalid.assessStress({ answers }),
+      (error) => error.code === 'INVALID_RESPONSE',
+    );
+  });
+
   it('returns sorted and bounded OpenStreetMap results without requiring network access', async () => {
     let requestBody;
     const facilities = await fetchNearbyFacilities({
@@ -128,17 +164,4 @@ describe('Phase 3 service behavior', () => {
     assert.equal(facilities.some(({ name }) => name === 'Outside Radius'), false);
   });
 
-  it('scores all five stress responses transparently and rejects incomplete answers', () => {
-    const calm = { scared: 0, confused: 0, overwhelmed: 0, focus: 2, tense: 0 };
-    const moderate = { scared: 1, confused: 1, overwhelmed: 0, focus: 1, tense: 1 };
-    const high = { scared: 2, confused: 2, overwhelmed: 2, focus: 0, tense: 2 };
-
-    assert.equal(calculateStressScore(calm), 0);
-    assert.equal(getStressLevel(0), 'low');
-    assert.equal(calculateStressScore(moderate), 4);
-    assert.equal(getStressLevel(4), 'moderate');
-    assert.equal(calculateStressScore(high), 10);
-    assert.equal(getStressLevel(10), 'high');
-    assert.throws(() => calculateStressScore({ ...calm, tense: undefined }), /Answer all five/);
-  });
 });

@@ -127,16 +127,17 @@ Admin-only routes:
 
 ## AI assistant and nearby resources
 
-These endpoints require authentication. The AI chat endpoint has an additional rate limit. `GEMINI_API_KEY` and `GEMINI_MODEL` are configured only on the backend. Gemini provides general conversation when no references match and generates answers grounded in retrieved references when available. Safety instructions must be supported by retrieved knowledge; without a key, ResQ uses the cited knowledge fallback and cannot generate general-topic replies.
+These endpoints require authentication and have an additional rate limit. `GEMINI_API_KEY` and `GEMINI_MODEL` are configured only on the backend. Gemini provides general conversation when no references match and generates answers grounded in retrieved references when available. Safety instructions must be supported by retrieved knowledge; without a key, ResQ uses the cited knowledge fallback and cannot generate general-topic replies.
 
 | Method and path | Behavior |
 | --- | --- |
 | `POST /ai/chat` | Accepts `{ "message": "...", "saveHistory": false }`, retrieves relevant active MongoDB knowledge, and returns `answer`, `citations`, `confidence`, `provider`, `warning`, and emergency-action metadata. Simple greetings receive a brief ResQ-focused response. `provider` is `greeting`, `knowledge_base`, or `gemini`. History saving is opt-in. |
+| `POST /ai/stress-assessment` | Accepts `{ "answers": { "scared": 0, "confused": 1, "overwhelmed": 2, "focus": 1, "tense": 0 }, "consentToGemini": true }` and returns a Gemini-estimated `level` of `low`, `moderate`, or `high`. The five values are 0 (No), 1 (Sometimes), or 2 (Yes); focus is phrased as ability to focus. This result is an unvalidated, non-clinical reflection. The route does not store the submitted answers or result and returns a service error without a Gemini result if the provider is unavailable. |
 | `GET /ai/conversation` | Returns the signed-in user's saved conversation only. |
 | `DELETE /ai/conversation` | Deletes the signed-in user's saved conversation and AI activity metadata. |
 | `POST /resources/nearby` | Accepts `{ "lat": 28.67, "lng": 77.45, "radiusKm": 10 }`. Returns OpenStreetMap community facility listings and only available fictional demo vehicles. Coordinates are used for the lookup and are not persisted. |
 
-`POST /ai/chat` never sends account data or saved conversation history to Gemini. The system prompt treats the question and retrieved excerpts as untrusted input. General non-safety conversation may use Gemini's general model knowledge; safety and emergency procedures are restricted to retrieved references. Emergency-intent responses do not dispatch or call anyone. Facility data should be independently verified and is not a verified list of operating services.
+`POST /ai/chat` never sends account data or saved conversation history to Gemini. The stress-assessment route sends only the structured answers, after the client submits explicit consent; it does not send account details, chat history, or free text to Gemini. AlertX does not persist stress answers/results; Google's data-processing policies apply. The system prompt treats the question and retrieved excerpts as untrusted input. General non-safety conversation may use Gemini's general model knowledge; safety and emergency procedures are restricted to retrieved references. Emergency-intent responses do not dispatch or call anyone. Facility data should be independently verified and is not a verified list of operating services.
 
 If Gemini fails, the response includes a knowledge-base fallback and a safe diagnostic warning. API-key/access, model configuration, quota, timeout/network, and provider-service failures are distinguished without exposing the key, request text, or upstream error body. The server logs only a sanitized failure code.
 

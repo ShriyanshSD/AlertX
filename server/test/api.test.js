@@ -639,6 +639,64 @@ const suite = describe('ResQ API and real-time services', () => {
     }
   });
 
+  it('requires explicit consent for transient Gemini stress assessment and does not persist results', async () => {
+    const answers = { scared: 2, confused: 1, overwhelmed: 1, focus: 0, tense: 2 };
+    const unauthorized = await request(baseUrl).post('/api/ai/stress-assessment').send({
+      answers,
+      consentToGemini: true,
+    });
+    assert.equal(unauthorized.status, 401);
+
+    const withoutConsent = await userAgent.post('/api/ai/stress-assessment').send({
+      answers,
+      consentToGemini: false,
+    });
+    assert.equal(withoutConsent.status, 400);
+
+    const invalidAnswers = await userAgent.post('/api/ai/stress-assessment').send({
+      answers: { ...answers, extra: 'private note' },
+      consentToGemini: true,
+    });
+    assert.equal(invalidAnswers.status, 400);
+
+    const originalService = app.get('geminiService');
+    let receivedAnswers;
+    app.set('geminiService', {
+      assessStress: async ({ answers: submittedAnswers }) => {
+        receivedAnswers = submittedAnswers;
+        return { level: 'moderate' };
+      },
+    });
+    try {
+      const beforeActivities = await AIActivity.countDocuments({ userId: testUser._id });
+      const beforeConversations = await AIConversation.countDocuments({ userId: testUser._id });
+      const assessment = await userAgent.post('/api/ai/stress-assessment').send({
+        answers,
+        consentToGemini: true,
+      });
+
+      assert.equal(assessment.status, 200);
+      assert.deepEqual(assessment.body.data, { level: 'moderate' });
+      assert.deepEqual(receivedAnswers, answers);
+      assert.equal(await AIActivity.countDocuments({ userId: testUser._id }), beforeActivities);
+      assert.equal(await AIConversation.countDocuments({ userId: testUser._id }), beforeConversations);
+    } finally {
+      app.set('geminiService', originalService);
+    }
+
+    app.set('geminiService', { assessStress: async () => null });
+    try {
+      const unavailable = await userAgent.post('/api/ai/stress-assessment').send({
+        answers,
+        consentToGemini: true,
+      });
+      assert.equal(unavailable.status, 503);
+      assert.match(unavailable.body.error.message, /not configured/i);
+    } finally {
+      app.set('geminiService', originalService);
+    }
+  });
+
   it('enforces dispatch permissions and updates authorized driver locations', async () => {
     const deniedStatus = await userAgent.patch('/api/vehicles/AMB-FAR/status').send({ status: 'offline' });
     assert.equal(deniedStatus.status, 403);

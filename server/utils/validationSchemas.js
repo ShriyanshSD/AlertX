@@ -122,6 +122,23 @@ export const vehicleUpdateSchema = z.object({
   message: 'At least one fleet service field must be provided.',
 });
 
+export const aiSchemas = {
+  chat: z.object({
+    message: z.string().trim().min(1).max(1200),
+    saveHistory: z.boolean().optional().default(false),
+  }),
+  stressAssessment: z.object({
+    answers: z.object({
+      scared: z.number().int().min(0).max(2),
+      confused: z.number().int().min(0).max(2),
+      overwhelmed: z.number().int().min(0).max(2),
+      focus: z.number().int().min(0).max(2),
+      tense: z.number().int().min(0).max(2),
+    }).strict(),
+    consentToGemini: z.literal(true),
+  }).strict(),
+};
+
 export const adminSchemas = {
   users: z.object({
     page: z.coerce.number().int().min(1).default(1),
@@ -135,10 +152,6 @@ export const adminSchemas = {
     status: z.enum(['pending', 'assigned', 'responding', 'resolved']).optional(),
   }).refine((value) => !value.from || !value.to || value.from <= value.to, {
     message: 'The start date must not be after the end date.',
-  }),
-  aiChat: z.object({
-    message: z.string().trim().min(1).max(1200),
-    saveHistory: z.boolean().optional().default(false),
   }),
   nearbyResources: z.object({
     lat: latitude,

@@ -87,7 +87,7 @@ The integration suite uses the isolated `resq_phase2_test` database and drops th
 | `/sos` | SOS creation and incident queue |
 | `/contacts` | Account-scoped trusted contacts and consent |
 | `/assistant` | ResQ AI Assistant with retrieved source citations and optional history |
-| `/stress-meter` | Private self-reflection check-in and breathing exercise |
+| `/stress-meter` | Opt-in Gemini stress reflection and breathing exercise |
 | `/admin` | Admin overview, user list, filtered analytics, and AI activity counts |
 | `/vehicles` | Fleet management |
 | `/history` | Emergency history and CSV export |
@@ -103,7 +103,7 @@ The integration suite uses the isolated `resq_phase2_test` database and drops th
 - An SOS can be filed for the signed-in user or a named friend/relative. The map pin is set by clicking or dragging, and device geolocation is opt-in; the saved request and live admin notification include the beneficiary and selected location. This does not call real emergency services.
 - Gemini requests contain only the current question and retrieved knowledge excerpts, not account details or previous conversation. For ordinary non-safety topics, Gemini may use its general model knowledge; emergency, medical, and safety instructions remain limited to retrieved references and the assistant refuses to guess when evidence is missing. The API key is server-only. For aggregate admin metrics, the API stores the account ID, topic category, provider, emergency-related flag, and timestamp—not message content; Clear removes this metadata and any saved conversation. When Gemini is unavailable or unconfigured, source-backed questions use cited knowledge and general questions receive a clear availability message.
 - Nearby assistance requests browser location only after an explicit user action. The coordinates are sent to the ResQ API and OpenStreetMap Overpass for the lookup; ResQ does not save them to the account or send them to Gemini. Facility records are not verified as operational. Nearby fleet results are fictional demo units only.
-- The stress check-in score is transparent, stays in browser memory, and is not a diagnosis or clinically validated assessment. It must not delay emergency assistance.
+- The stress check-in sends only the five selected answers to Gemini after explicit consent. AlertX does not save the answers or result; Google’s data-processing policies apply. The AI returns a broad, non-clinical reflection, not a diagnosis or validated screening, and may be inaccurate. It must not delay emergency assistance. Without Gemini, the app reports that no assessment was produced.
 - Real GPS updates are accepted only from a driver authenticated for the corresponding non-demo vehicle. Demo vehicle coordinates are updated by the server simulator, not client-supplied vehicle IDs.
 - `DEMO_MODE` determines whether new SOS and newly registered fleet records are marked as demo. No real-world dispatch, SMS, or email provider is implemented.
 - OpenStreetMap tiles are loaded from `tile.openstreetmap.org` and require an internet connection.

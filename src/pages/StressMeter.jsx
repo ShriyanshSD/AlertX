@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Activity, HeartPulse, Info, Pause, Play, Sparkles, UserRound } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Activity, HeartPulse, Info, LoaderCircle, Pause, Play, Sparkles, UserRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { SectionHeading } from '../components/UI.jsx';
-import { calculateStressScore, getStressLevel } from '../services/stressAssessment.js';
+import api, { getApiError } from '../services/api.js';
 
 const questions = [
   { id: 'scared', text: 'Are you feeling scared?' },
@@ -18,28 +18,30 @@ const phases = [
   { name: 'Breathe out', seconds: 6, key: 'exhale' },
 ];
 
-function getAssessment(score) {
-  const level = getStressLevel(score);
-  if (level === 'low') return {
-    label: 'Low stress',
+const assessmentByLevel = {
+  low: {
+    label: 'Lower stress signals',
     tone: 'green',
-    message: 'Your answers suggest a lower level of stress right now. Keep taking things at your own pace.',
-  };
-  if (level === 'moderate') return {
-    label: 'Moderate stress',
+    message: 'Your selected answers suggest fewer signs of stress right now. This is only an AI reflection, not a clinical measure.',
+  },
+  moderate: {
+    label: 'Some stress signals',
     tone: 'orange',
-    message: 'You may find a short breathing or grounding pause helpful. Consider checking in with someone you trust.',
-  };
-  return {
-    label: 'High stress',
+    message: 'Your selected answers suggest a mix of stress signals. A pause or a check-in with someone you trust may help.',
+  },
+  high: {
+    label: 'More stress signals',
     tone: 'red',
-    message: 'Your answers suggest you may be feeling very stressed. Reach out to someone you trust. If you are in danger, seek emergency help now.',
-  };
+    message: 'Your selected answers suggest several stress signals. Consider reaching out to someone you trust or a qualified professional.',
+  },
 }
 
 export default function StressMeter() {
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [assessment, setAssessment] = useState(null);
+  const [consentToGemini, setConsentToGemini] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [breathing, setBreathing] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
@@ -54,14 +56,24 @@ export default function StressMeter() {
   const phase = phases[phaseIndex];
   const secondsRemaining = phase.seconds - (elapsed - phaseStart);
   const unanswered = questions.some((question) => selectedAnswers[question.id] === undefined);
-  const score = useMemo(() => {
-    if (unanswered) return 0;
-    return calculateStressScore(selectedAnswers);
-  }, [selectedAnswers, unanswered]);
 
-  const calculateAssessment = () => {
-    if (unanswered) return;
-    setAssessment(getAssessment(score));
+  const calculateAssessment = async () => {
+    if (unanswered || !consentToGemini || loading) return;
+    setAssessment(null);
+    setError('');
+    setLoading(true);
+    try {
+      const { data } = await api.post('/ai/stress-assessment', {
+        answers: selectedAnswers,
+        consentToGemini: true,
+      }, { timeout: 30000 });
+      setAssessment(data.data);
+    } catch (requestError) {
+      setError(getApiError(requestError));
+    } finally {
+      setLoading(false);
+      setConsentToGemini(false);
+    }
   };
 
   const toggleBreathing = () => {
@@ -75,13 +87,13 @@ export default function StressMeter() {
   };
 
   return <>
-    <SectionHeading eyebrow="WELLBEING CHECK-IN" title="Stress meter" description="A brief self-reflection, not a medical assessment or diagnosis." action={<span className="demo-pill"><HeartPulse size={13} /> PRIVATE · NOT SAVED</span>} />
+    <SectionHeading eyebrow="GEMINI WELLBEING REFLECTION" title="AI stress check-in" description="Gemini estimates a broad stress signal from your selected answers. This is not a diagnosis or clinical screening." action={<span className="demo-pill"><HeartPulse size={13} /> ONE-TIME · NOT SAVED BY ALERTX</span>} />
     <div className="stress-layout">
       <section className="panel stress-card">
         <div className="stress-card-icon"><HeartPulse size={22} /></div>
-        <span className="eyebrow">A MOMENT FOR YOU</span>
-        <h2>How are you feeling right now?</h2>
-        <p className="muted">Choose one answer for each statement. Your answers stay in this page and are not sent to the server.</p>
+        <span className="eyebrow">A PRIVATE, ONE-TIME CHECK-IN</span>
+        <h2>How have you been feeling?</h2>
+        <p className="muted">Choose the answer that feels closest for each statement. Gemini will consider these five selections only; the result may be inaccurate.</p>
         <div className="stress-questions">
           {questions.map((question, index) => <fieldset className="stress-question" key={question.id}>
             <legend><span>{index + 1}</span>{question.text}</legend>
@@ -89,21 +101,45 @@ export default function StressMeter() {
               {answers.map((answer, answerIndex) => <button
                 type="button"
                 key={answer}
+                disabled={loading}
                 aria-pressed={selectedAnswers[question.id] === answerIndex}
                 className={selectedAnswers[question.id] === answerIndex ? 'selected' : ''}
                 onClick={() => {
                   setSelectedAnswers((current) => ({ ...current, [question.id]: answerIndex }));
                   setAssessment(null);
+                  setConsentToGemini(false);
+                  setError('');
                 }}
               >{answer}</button>)}
             </div>
           </fieldset>)}
         </div>
-        <button className="button primary full" type="button" onClick={calculateAssessment} disabled={unanswered}>See my check-in</button>
+        <div className="stress-ai-privacy">
+          <strong>Before you continue</strong>
+          <p>Your five selected answers will be sent to Google Gemini for this check-in. AlertX does not save the answers or result, and the Gemini request does not include your name, account details, chat history, or free-text notes. Google’s data-processing policies apply.</p>
+          <label className="stress-consent">
+            <input
+              type="checkbox"
+              checked={consentToGemini}
+              disabled={loading}
+              onChange={(event) => {
+                setConsentToGemini(event.target.checked);
+                setAssessment(null);
+                setError('');
+              }}
+            />
+            <span>I agree to send these answers to Google Gemini for a one-time reflection.</span>
+          </label>
+        </div>
+        <button className="button primary full" type="button" onClick={calculateAssessment} disabled={unanswered || !consentToGemini || loading}>
+          {loading ? <><LoaderCircle size={15} className="spinner-icon" /> Asking Gemini…</> : <><Sparkles size={15} /> Analyze my answers</>}
+        </button>
         {unanswered && <small className="stress-hint">Answer all five statements to calculate the check-in.</small>}
-        {assessment && <div className={`stress-meter-display ${assessment.tone} stress-result`} aria-live="polite">
-          <div className="meter-number">{score}<small>/ 10</small></div>
-          <div><strong>{assessment.label}</strong><span>{assessment.message}</span></div>
+        {!unanswered && !consentToGemini && <small className="stress-hint">Review the privacy note and consent before sending your answers.</small>}
+        {error && <p className="form-error" role="alert">{error}</p>}
+        {assessment && assessmentByLevel[assessment.level] && <div className={`stress-meter-display ${assessmentByLevel[assessment.level].tone} stress-result`} aria-live="polite">
+          <div className="stress-ai-icon"><Sparkles size={20} /></div>
+          <div><strong>Gemini reflection · {assessmentByLevel[assessment.level].label}</strong><span>{assessmentByLevel[assessment.level].message}</span></div>
         </div>}
         {assessment && <div className="stress-suggestions">
           <h3>Small next steps</h3>
@@ -112,7 +148,7 @@ export default function StressMeter() {
           <p><Info size={14} /> If there is immediate danger, skip this check-in and get emergency help now.</p>
           <Link to="/contacts" className="panel-link">View trusted contacts</Link>
         </div>}
-        <small className="stress-disclaimer"><Info size={13} /> Transparent score: symptoms score No=0, Sometimes=1, Yes=2; focus is reverse-scored. 0–3 low, 4–6 moderate, 7–10 high. Not clinically validated.</small>
+        <small className="stress-disclaimer"><Info size={13} /> AI-generated, non-clinical reflection. It is not a diagnosis, validated screening, or substitute for professional support. Do not use it to make health decisions or delay emergency help.</small>
       </section>
       <aside className="stress-aside">
         <section className="stress-aside-art"><div className="stress-wave"><Activity size={25} /></div><span className="eyebrow">BREATHING PAUSE</span><h2>Take one<br />comfortable breath.</h2><p>Stop at any time. If focusing on breathing feels uncomfortable, return to your normal breathing.</p></section>
