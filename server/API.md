@@ -8,7 +8,7 @@ All successful responses are wrapped in `{ "data": ... }`. Errors use `{ "error"
 
 | Role | Access |
 | --- | --- |
-| `user` | Own contacts and SOS requests; vehicles assigned to the user's SOS |
+| `user` | Own contacts and SOS requests; available fleet units and vehicles assigned to the user's active SOS |
 | `driver` | Vehicles assigned to that driver; status updates for assigned SOS; real location updates for their non-demo vehicles |
 | `operator` | Fleet, nearby search, SOS dispatch/status, and operational Socket.IO room |
 | `admin` | Operator access plus user/analytics endpoints and demo simulator controls |
@@ -148,6 +148,7 @@ Client events:
 
 Server events:
 
+- `fleetUpdated` — notifies clients to reload the role-scoped fleet list after a fleet change.
 - `vehicleLocationUpdated`
 - `sosCreated`
 - `sosUpdated`
@@ -157,4 +158,4 @@ Server events:
 - `sosResolved`
 - `socketError` for rejected events without an acknowledgement callback
 
-Every connection is authenticated and joins only its own `user:<id>` room automatically. Admin, operations, SOS, and vehicle rooms require explicit authorization. Location history is persisted by the API/simulator and is retained for up to 30 days.
+Every connection is authenticated and automatically joins its own `user:<id>` room and the fleet dashboard room. `fleetUpdated` carries no record data; clients reload `GET /vehicles` to apply their role-specific visibility. Available vehicle location updates are broadcast to authenticated fleet dashboards, while unavailable fleet locations remain limited to admins/operators, assigned drivers, and users assigned to the SOS. Admin, operations, SOS, and vehicle rooms require explicit authorization. Location history is persisted by the API/simulator and is retained for up to 30 days.
