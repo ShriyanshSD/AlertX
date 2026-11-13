@@ -162,6 +162,7 @@ export default function Admin() {
       { value: 'trends', label: 'Emergency trends' },
       { value: 'vehicles', label: 'Vehicle performance' },
       { value: 'response', label: 'Response statistics' },
+      ...(user?.role === 'admin' ? [{ value: 'users', label: 'User management' }] : []),
     ]} value={activeTab} onChange={setActiveTab} label="Analytics sections" />
     {activeTab === 'overview' && <div className="stat-grid admin-stat-grid">
       <DashboardCard label="Total fleet units" value={vehicleCount} note="Across all service types" icon={Ambulance} tone="blue" />
@@ -194,7 +195,7 @@ export default function Admin() {
       <div className="panel admin-breakdown-panel"><div className="panel-heading"><div><h2>Response status</h2><p>Filtered incident counts</p></div></div>{breakdownRows(analytics?.byStatus)}</div>
     </section>}
     {['overview', 'response'].includes(activeTab) && <section className="panel admin-sos-preview"><div className="panel-heading"><div><h2>Latest incident requests</h2><p>Recent records · source shown where available</p></div><Link to="/history" className="panel-link">View history <ArrowRight size={14} /></Link></div><div className="admin-sos-list">{filteredSos.slice(0, 5).map((item) => <div className="admin-sos-item" key={item.sosId || item.id}><span className="admin-sos-icon"><Siren size={15} /></span><span><strong>{item.sosId || item.id} · {item.type}</strong><small>{item.location || 'Location unavailable'} · {item.isDemo ? 'Simulated record' : 'Reported record'}</small></span><StatusBadge tone={item.priority?.toLowerCase()}>{item.priority}</StatusBadge><small className="muted"><Clock3 size={12} /> {item.time}</small></div>)}{filteredSos.length === 0 && <p className="muted small">No incidents match the selected filters.</p>}</div></section>}
-    {user?.role === 'admin' && activeTab === 'response' && <>
+    {user?.role === 'admin' && activeTab === 'users' && <>
       {userFormOpen && <form className="panel add-contact-form" onSubmit={saveUser}>
         <div className="panel-heading">
           <div>

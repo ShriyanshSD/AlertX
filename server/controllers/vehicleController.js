@@ -7,7 +7,7 @@ import AppError from '../utils/AppError.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { haversineDistanceKm, toPoint } from '../utils/geo.js';
 import { serializeVehicle } from '../utils/serializers.js';
-import { emitToAdmin, emitToOperations, emitToSos, emitToUser } from '../services/events.js';
+import { emitToAdmin, emitToFleetDashboard, emitToOperations, emitToSos, emitToUser } from '../services/events.js';
 
 async function vehicleScope(user) {
   if (['admin', 'operator'].includes(user.role)) return {};
@@ -17,7 +17,12 @@ async function vehicleScope(user) {
     status: { $ne: 'resolved' },
     assignedVehicle: { $ne: null },
   }).select('assignedVehicle');
-  return { _id: { $in: sosRecords.map((record) => record.assignedVehicle) } };
+  return {
+    $or: [
+      { _id: { $in: sosRecords.map((record) => record.assignedVehicle) } },
+      { status: 'available' },
+    ],
+  };
 }
 
 export const listVehicles = asyncHandler(async (request, response) => {
@@ -78,6 +83,7 @@ export const createVehicle = asyncHandler(async (request, response) => {
     currentLocation: toPoint(request.body.location),
     isDemo: config.demoMode,
   });
+  emitToFleetDashboard(request.app.get('io'), 'fleetUpdated');
   response.status(201).json({ data: { vehicle: serializeVehicle(vehicle) } });
 });
 
@@ -97,6 +103,7 @@ export const updateVehicleStatus = asyncHandler(async (request, response) => {
   const statusEvent = { vehicle: serialized, previousStatus, isDemo: vehicle.isDemo };
   emitToAdmin(io, 'vehicleStatusChanged', statusEvent);
   emitToOperations(io, 'vehicleStatusChanged', statusEvent);
+  emitToFleetDashboard(io, 'fleetUpdated');
   if (vehicle.assignedSOS) {
     const sos = await SOS.findById(vehicle.assignedSOS).select('sosId userId');
     if (sos) {
@@ -130,6 +137,7 @@ export const updateVehicleLocation = asyncHandler(async (request, response) => {
   const io = request.app.get('io');
   emitToAdmin(io, 'vehicleLocationUpdated', payload);
   emitToOperations(io, 'vehicleLocationUpdated', payload);
+  if (vehicle.status === 'available') emitToFleetDashboard(io, 'vehicleLocationUpdated', payload);
   io?.to(`vehicle:${vehicle.vehicleId}`).emit('vehicleLocationUpdated', payload);
   if (vehicle.assignedSOS) {
     const assignedSos = await SOS.findById(vehicle.assignedSOS).select('sosId userId');
@@ -146,6 +154,7 @@ export const deleteVehicle = asyncHandler(async (request, response) => {
   if (!vehicle) throw new AppError(404, 'Vehicle not found.');
   if (vehicle.assignedSOS) throw new AppError(409, 'Resolve the active SOS before removing this vehicle.');
   await vehicle.deleteOne();
+  emitToFleetDashboard(request.app.get('io'), 'fleetUpdated');
   response.json({ data: { deleted: vehicle.vehicleId } });
 });
 
@@ -160,6 +169,7 @@ export const updateVehicleDetails = asyncHandler(async (request, response) => {
   if (request.body.type !== undefined) vehicle.type = request.body.type;
   if (request.body.driverName !== undefined) vehicle.driverName = request.body.driverName || 'Unassigned';
   await vehicle.save();
+  emitToFleetDashboard(request.app.get('io'), 'fleetUpdated');
   response.json({ data: { vehicle: serializeVehicle(vehicle) } });
 });
 

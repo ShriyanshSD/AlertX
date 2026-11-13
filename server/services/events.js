@@ -13,3 +13,7 @@ export function emitToUser(io, userId, event, payload) {
 export function emitToSos(io, sosId, event, payload) {
   io?.to(`sos:${sosId}`).emit(event, payload);
 }
+
+export function emitToFleetDashboard(io, event, payload) {
+  io?.to('dashboard:fleet').emit(event, payload);
+}

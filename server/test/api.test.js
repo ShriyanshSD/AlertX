@@ -83,7 +83,7 @@ const suite = describe('ResQ API and real-time services', () => {
       Vehicle.create({
         vehicleId: 'AMB-FAR',
         type: 'ambulance',
-        status: 'available',
+        status: 'offline',
         currentLocation: toPoint({ lat: 28.68, lng: 77.45 }),
         isDemo: true,
         speed: 0,
@@ -420,7 +420,10 @@ const suite = describe('ResQ API and real-time services', () => {
   it('limits fleet visibility and ranks nearby vehicles by straight-line distance', async () => {
     const visibleToUser = await userAgent.get('/api/vehicles');
     assert.equal(visibleToUser.status, 200);
-    assert.deepEqual(visibleToUser.body.data.vehicles, []);
+    const visibleVehicleIds = visibleToUser.body.data.vehicles.map((vehicle) => vehicle.vehicleId);
+    assert.ok(visibleVehicleIds.includes('AMB-NEAR'));
+    assert.ok(visibleVehicleIds.includes('AMB-REAL'));
+    assert.equal(visibleVehicleIds.includes('AMB-FAR'), false);
 
     const nearby = await operatorAgent.get('/api/vehicles/nearby?lat=28.6702&lng=77.4524&radiusKm=10&type=ambulance');
     assert.equal(nearby.status, 200);
@@ -457,6 +460,8 @@ const suite = describe('ResQ API and real-time services', () => {
     assert.equal(response.body.data.sos.status, 'Assigned');
     assert.equal(response.body.data.sos.alertContacts[0].status, 'consent_required');
     createdSosId = response.body.data.sos.sosId;
+    const userFleet = await userAgent.get('/api/vehicles');
+    assert.ok(userFleet.body.data.vehicles.some((vehicle) => vehicle.vehicleId === 'AMB-NEAR'));
 
     const [assigned, alert, forbidden] = await Promise.all([
       Vehicle.findById(nearVehicle._id),
@@ -469,14 +474,18 @@ const suite = describe('ResQ API and real-time services', () => {
     assert.equal(forbidden.status, 404);
   });
 
-  it('keeps assigned-unit history after resolution without exposing live fleet access', async () => {
+  it('keeps assigned-unit history after resolution while limiting user fleet visibility', async () => {
     const responding = await adminAgent.patch(`/api/sos/${createdSosId}/status`).send({ status: 'responding' });
     assert.equal(responding.status, 200);
     const resolved = await adminAgent.patch(`/api/sos/${createdSosId}/status`).send({ status: 'resolved' });
     assert.equal(resolved.status, 200);
     assert.equal(resolved.body.data.sos.assignedVehicle, 'AMB-NEAR');
     assert.equal((await Vehicle.findById(nearVehicle._id)).assignedSOS, null);
-    assert.equal((await userAgent.get('/api/vehicles')).body.data.vehicles.length, 0);
+    const userFleet = await userAgent.get('/api/vehicles');
+    const visibleVehicleIds = userFleet.body.data.vehicles.map((vehicle) => vehicle.vehicleId);
+    assert.ok(visibleVehicleIds.includes('AMB-NEAR'));
+    assert.ok(visibleVehicleIds.includes('AMB-REAL'));
+    assert.equal(visibleVehicleIds.includes('AMB-FAR'), false);
   });
 
   it('supports private contact CRUD and explicit notification consent', async () => {
@@ -818,6 +827,24 @@ const suite = describe('ResQ API and real-time services', () => {
             resolve(event);
           });
         });
+        const fleetChanged = new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('Fleet update was not broadcast to user dashboards.')), 1500);
+          untrustedClient.once('fleetUpdated', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+        const createdVehicle = await adminAgent.post('/api/vehicles').send({
+          vehicleId: 'AMB-LIVE-TEST',
+          type: 'ambulance',
+          location: { lat: 28.671, lng: 77.455 },
+        });
+        assert.equal(createdVehicle.status, 201);
+        await fleetChanged;
+        const userFleet = await userAgent.get('/api/vehicles');
+        assert.ok(userFleet.body.data.vehicles.some((vehicle) => vehicle.vehicleId === 'AMB-LIVE-TEST'));
+        await adminAgent.delete('/api/vehicles/AMB-LIVE-TEST');
+
         const created = await userAgent.post('/api/sos').send({
           emergencyType: 'medical',
           location: { lat: 28.6702, lng: 77.4524 },

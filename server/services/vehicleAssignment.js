@@ -3,7 +3,7 @@ import Vehicle from '../models/Vehicle.js';
 import AppError from '../utils/AppError.js';
 import { haversineDistanceKm } from '../utils/geo.js';
 import { serializeSos, serializeVehicle } from '../utils/serializers.js';
-import { emitToAdmin, emitToOperations, emitToSos, emitToUser } from './events.js';
+import { emitToAdmin, emitToFleetDashboard, emitToOperations, emitToSos, emitToUser } from './events.js';
 
 const vehicleTypesByEmergency = {
   medical: ['ambulance'],
@@ -46,6 +46,7 @@ export async function assignNearestVehicle(sos, io) {
     emitToOperations(io, 'vehicleAssigned', payload);
     emitToSos(io, sos.sosId, 'vehicleAssigned', payload);
     emitToUser(io, sos.userId, 'vehicleAssigned', payload);
+    emitToFleetDashboard(io, 'fleetUpdated');
     return vehicle;
   }
 
@@ -99,6 +100,7 @@ export async function assignSpecificVehicle(sos, vehicleId, io) {
   emitToOperations(io, 'vehicleAssigned', payload);
   emitToSos(io, sos.sosId, 'vehicleAssigned', payload);
   emitToUser(io, sos.userId, 'vehicleAssigned', payload);
+  emitToFleetDashboard(io, 'fleetUpdated');
   return assigned;
 }
 
@@ -154,6 +156,7 @@ export async function updateSosStatus(sos, status, io) {
     emitToOperations(io, 'vehicleStatusChanged', vehicleEvent);
     emitToSos(io, sos.sosId, 'vehicleStatusChanged', vehicleEvent);
     emitToUser(io, sos.userId, 'vehicleStatusChanged', vehicleEvent);
+    emitToFleetDashboard(io, 'fleetUpdated');
   }
   emitToAdmin(io, 'sosUpdated', payload);
   emitToOperations(io, 'sosUpdated', payload);

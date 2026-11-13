@@ -116,7 +116,10 @@ export default function Vehicles() {
       } else {
           newVehicle = { id: form.id.trim().toUpperCase(), type: form.type, status: 'available', lat: 28.671 + Math.random() * 0.006, lng: 77.45 + Math.random() * 0.006, speed: 0, heading: 0, crew: 'Unassigned', eta: '—', isDemo: true };
       }
-      setVehicles((current) => [...current, newVehicle]);
+      setVehicles((current) => [
+        ...current.filter((vehicle) => vehicle.id !== newVehicle.id),
+        newVehicle,
+      ]);
       setForm(initialForm);
       setAdding(false);
     } catch (requestError) {

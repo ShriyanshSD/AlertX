@@ -47,6 +47,7 @@ export function attachSocketServer(httpServer, app, { path = '/socket.io', addTr
   io.on('connection', (socket) => {
     const user = socket.data.user;
     socket.join(`user:${user.id}`);
+    socket.join('dashboard:fleet');
 
     socket.on('joinTrackingRoom', async (payload = {}, acknowledgement) => {
       try {
@@ -131,6 +132,7 @@ export function attachSocketServer(httpServer, app, { path = '/socket.io', addTr
         const event = { vehicle: serializeVehicle(vehicle), isDemo: false };
         emitToAdmin(io, 'vehicleLocationUpdated', event);
         emitToOperations(io, 'vehicleLocationUpdated', event);
+        if (vehicle.status === 'available') emitToFleetDashboard(io, 'vehicleLocationUpdated', event);
         io.to(`vehicle:${vehicle.vehicleId}`).emit('vehicleLocationUpdated', event);
         if (vehicle.assignedSOS) {
           const sos = await SOS.findById(vehicle.assignedSOS).select('sosId userId');

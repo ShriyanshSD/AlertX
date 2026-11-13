@@ -70,10 +70,12 @@ export default function useVehicles() {
       if (active) setError(`Live updates unavailable: ${socketError.message}`);
     };
     const onVehicleAssigned = ({ vehicle }) => vehicle && updateVehicle({ vehicle });
+    const onFleetUpdated = () => loadVehicles();
     socket.on('connect', joinTrackingRoom);
     socket.on('connect_error', onSocketError);
     socket.on('vehicleLocationUpdated', updateVehicle);
     socket.on('vehicleAssigned', onVehicleAssigned);
+    socket.on('fleetUpdated', onFleetUpdated);
     if (socket.connected) joinTrackingRoom();
 
     if (['admin', 'operator'].includes(user.role)) {
@@ -90,6 +92,7 @@ export default function useVehicles() {
       socket.off('connect_error', onSocketError);
       socket.off('vehicleLocationUpdated', updateVehicle);
       socket.off('vehicleAssigned', onVehicleAssigned);
+      socket.off('fleetUpdated', onFleetUpdated);
       socket.disconnect();
     };
   }, [enabled, user]);
