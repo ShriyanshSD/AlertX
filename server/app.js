@@ -52,7 +52,6 @@ export function createApp({
     credentials: true,
     origin(origin, callback) {
       let developmentOrigin = false;
-      let vercelPreviewOrigin = false;
       if (config.nodeEnv !== 'production' && origin) {
         try {
           const url = new URL(origin);
@@ -62,14 +61,7 @@ export function createApp({
           developmentOrigin = false;
         }
       }
-      if (origin) {
-        try {
-          vercelPreviewOrigin = /^https:\/\/[^/]+\.vercel\.app$/.test(origin);
-        } catch {
-          vercelPreviewOrigin = false;
-        }
-      }
-      if (!origin || config.corsOrigins.includes(origin) || developmentOrigin || vercelPreviewOrigin) return callback(null, true);
+      if (!origin || config.corsOrigins.includes(origin) || developmentOrigin) return callback(null, true);
       return callback(new AppError(403, 'Origin is not allowed by CORS.'));
     },
   }));

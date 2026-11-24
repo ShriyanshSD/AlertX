@@ -92,28 +92,6 @@ export default function LiveMap({ vehicles = [], contacts = [], sosRequests = []
   const [locationError, setLocationError] = useState('');
   const [locating, setLocating] = useState(false);
 
-  useEffect(() => {
-    if (!navigator.geolocation) {
-      setLocationError('Your browser does not support location sharing.');
-      return undefined;
-    }
-    setLocating(true);
-    const watchId = navigator.geolocation.watchPosition(
-      ({ coords }) => {
-        setCurrentLocation([coords.latitude, coords.longitude]);
-        setLocationError('');
-        setLocating(false);
-      },
-      (error) => {
-        setLocationError(error.code === 1
-          ? 'Location permission was denied. Allow location access to show your live position.'
-          : 'Your live location could not be determined.');
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 },
-    );
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
   return <div className="map-shell">
     <MapContainer center={center} zoom={14} scrollWheelZoom className="live-map">
       <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />

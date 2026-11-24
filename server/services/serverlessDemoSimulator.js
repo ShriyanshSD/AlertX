@@ -142,6 +142,10 @@ export function createServerlessDemoSimulator({
         { $set: { running: false } },
         { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
       );
+      if (timer) {
+        clearInterval(timer);
+        timer = undefined;
+      }
       return getState();
     },
     async reset() {

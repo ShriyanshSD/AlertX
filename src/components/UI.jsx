@@ -148,6 +148,14 @@ export function EmergencyModal({ onClose, onSubmit, contacts = [], allowSimulate
     if (!selected || !location) return;
     setSubmitting(true);
     setError('');
+    const consentingContacts = contacts.filter((contact) => (
+      selectedContacts.includes(contact.contactId || contact.id)
+      && contact.notificationConsent
+    ));
+    let whatsappWindow = null;
+    if (consentingContacts.length > 0) {
+      whatsappWindow = window.open('about:blank', '_blank');
+    }
     try {
       const created = await onSubmit(selected, selectedContacts, {
         description: description.trim(),
@@ -159,16 +167,18 @@ export function EmergencyModal({ onClose, onSubmit, contacts = [], allowSimulate
         personRelationship: requestFor === 'other' ? personRelationship.trim() : '',
       });
       setSubmitted(created);
-
-      const firstContact = contacts.find((contact) => (
-        selectedContacts.includes(contact.contactId || contact.id)
-        && contact.notificationConsent
-      ));
+      const firstContact = consentingContacts[0];
       if (firstContact) {
-        const phone = String(firstContact.phone).replace(/\D/g, '');
+        const digits = String(firstContact.phone).replace(/\D/g, '');
+        const phone = digits.startsWith('00') ? digits.slice(2) : digits;
         const locationUrl = `https://www.google.com/maps?q=${location.lat},${location.lng}`;
         const message = `ALERTX EMERGENCY: ${personName || 'I'} may need help. SOS ${created.sosId || created.id}. Location: ${locationUrl}. Please call and contact local emergency services if immediate danger.`;
-        window.open(`https://wa.me/${phone.startsWith('00') ? phone.slice(2) : phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+        const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+        if (whatsappWindow) {
+          whatsappWindow.location.href = url;
+        } else {
+          window.open(url, '_blank', 'noopener,noreferrer');
+        }
       }
     } catch (requestError) {
       setError(requestError.response?.data?.error?.message || requestError.message || 'The emergency request could not be created.');

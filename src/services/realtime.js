@@ -12,7 +12,7 @@ function getSocket() {
       path: import.meta.env.VITE_SOCKET_PATH
         || (isProductionBuild ? '/api/server/socket.io' : '/socket.io'),
       addTrailingSlash: !isProductionBuild,
-      ...(isProductionBuild ? { transports: ['websocket'] } : {}),
+      ...(isProductionBuild ? { transports: ['polling', 'websocket'] } : {}),
       withCredentials: true,
       autoConnect: true,
       reconnectionAttempts: Infinity,
