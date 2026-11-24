@@ -43,12 +43,16 @@ export default function useSos({ activeOnly = false } = {}) {
     } finally {
       setLoading(false);
     }
-  }, [activeOnly, user]);
+  }, [activeOnly, refresh, user]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
   useEffect(() => {
     if (!user) return undefined;
+    if (import.meta.env.MODE === 'production') {
+      const timer = window.setInterval(refresh, 5000);
+      return () => window.clearInterval(timer);
+    }
     const socket = connectRealtime();
     const onCreated = (request) => setRequests((current) => mergeRequest(current, request, activeOnly));
     const onUpdated = (request) => setRequests((current) => mergeRequest(current, request, activeOnly));

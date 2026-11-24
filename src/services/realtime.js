@@ -25,6 +25,17 @@ function getSocket() {
 }
 
 export function connectRealtime() {
+  if (import.meta.env.MODE === 'production') {
+    const noop = () => {};
+    const client = {
+      connected: false,
+      on: () => client,
+      off: () => client,
+      emit: () => client,
+      disconnect: noop,
+    };
+    return client;
+  }
   const socket = getSocket();
   const socketGeneration = generation;
   referenceCount += 1;

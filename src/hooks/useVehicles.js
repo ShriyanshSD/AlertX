@@ -47,6 +47,14 @@ export default function useVehicles() {
       });
     loadVehicles();
 
+    if (import.meta.env.MODE === 'production') {
+      const timer = window.setInterval(loadVehicles, 5000);
+      return () => {
+        active = false;
+        window.clearInterval(timer);
+      };
+    }
+
     const socket = connectRealtime();
     const roomType = user.role === 'admin' ? 'admin' : ['operator'].includes(user.role) ? 'operations' : 'user';
     const updateVehicle = (event) => {
