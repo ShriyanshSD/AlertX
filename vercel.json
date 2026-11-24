@@ -5,6 +5,14 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/server/socket.io",
+      "destination": "/api/server?__vercel_path=/api/server/socket.io"
+    },
+    {
+      "source": "/api/server/socket.io/:path*",
+      "destination": "/api/server?__vercel_path=/api/server/socket.io/:path*"
+    },
+    {
       "source": "/api",
       "destination": "/api/server?__vercel_path=/api"
     },
