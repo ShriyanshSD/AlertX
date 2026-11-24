@@ -49,7 +49,7 @@ Never use the test database for deployment. `npm test` drops the isolated `resq_
 
 ## 5. Scope and privacy limits
 
-- This demo does not place emergency calls, dispatch real vehicles, or send SMS/email.
+- This demo does not place emergency calls or dispatch real vehicles. WhatsApp sharing requires user consent and opens the WhatsApp compose screen; it is not silently sent.
 - Nearby facility records are community contributed and may be outdated; ResQ does not verify operating status.
 - Nearby assistance location is requested only after a user action and sent to the backend and Overpass for that lookup. It is not stored in the user's account or sent to Gemini.
 - Saved AI conversations are opt-in and user-scoped. AI activity analytics contain category/provider metadata, not message content.

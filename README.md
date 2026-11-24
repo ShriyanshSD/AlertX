@@ -105,7 +105,7 @@ The integration suite uses the isolated `resq_phase2_test` database and drops th
 - Nearby assistance requests browser location only after an explicit user action. The coordinates are sent to the ResQ API and OpenStreetMap Overpass for the lookup; ResQ does not save them to the account or send them to Gemini. Facility records are not verified as operational. Nearby fleet results are fictional demo units only.
 - The stress check-in sends only the five selected answers to Gemini after explicit consent. AlertX does not save the answers or result; Google’s data-processing policies apply. The AI returns a broad, non-clinical reflection, not a diagnosis or validated screening, and may be inaccurate. It must not delay emergency assistance. Without Gemini, the app reports that no assessment was produced.
 - Real GPS updates are accepted only from a driver authenticated for the corresponding non-demo vehicle. Demo vehicle coordinates are updated by the server simulator, not client-supplied vehicle IDs.
-- `DEMO_MODE` determines whether new SOS and newly registered fleet records are marked as demo. No real-world dispatch, SMS, or email provider is implemented.
+- `DEMO_MODE` determines whether new SOS and newly registered fleet records are marked as demo. No real-world dispatch provider is implemented.
 - OpenStreetMap tiles are loaded from `tile.openstreetmap.org` and require an internet connection.
 
 ## Project structure

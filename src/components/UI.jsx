@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, Ambulance, Bell, Check, ChevronRight, Clock3, Flame, LocateFixed, MapPin, Menu, Plus, Shield, UserRound, X } from 'lucide-react';
 import SOSLocationPicker from './SOSLocationPicker.jsx';
 
@@ -105,6 +105,11 @@ export function EmergencyModal({ onClose, onSubmit, contacts = [], allowSimulate
   const [locationSource, setLocationSource] = useState('');
   const [locationError, setLocationError] = useState('');
   const [locating, setLocating] = useState(false);
+  useEffect(() => {
+    if (!allowSimulatedLocation && navigator.geolocation) {
+      requestLocation();
+    }
+  }, [allowSimulatedLocation]);
   const requestLocation = () => {
     if (!navigator.geolocation) {
       setLocationError('Location sharing is not supported by this browser.');
@@ -144,7 +149,7 @@ export function EmergencyModal({ onClose, onSubmit, contacts = [], allowSimulate
     setSubmitting(true);
     setError('');
     try {
-      setSubmitted(await onSubmit(selected, selectedContacts, {
+      const created = await onSubmit(selected, selectedContacts, {
         description: description.trim(),
         location,
         locationSource,
@@ -152,7 +157,19 @@ export function EmergencyModal({ onClose, onSubmit, contacts = [], allowSimulate
         reportedFor: requestFor,
         personName: requestFor === 'other' ? personName.trim() : '',
         personRelationship: requestFor === 'other' ? personRelationship.trim() : '',
-      }));
+      });
+      setSubmitted(created);
+
+      const firstContact = contacts.find((contact) => (
+        selectedContacts.includes(contact.contactId || contact.id)
+        && contact.notificationConsent
+      ));
+      if (firstContact) {
+        const phone = String(firstContact.phone).replace(/\D/g, '');
+        const locationUrl = `https://www.google.com/maps?q=${location.lat},${location.lng}`;
+        const message = `ALERTX EMERGENCY: ${personName || 'I'} may need help. SOS ${created.sosId || created.id}. Location: ${locationUrl}. Please call and contact local emergency services if immediate danger.`;
+        window.open(`https://wa.me/${phone.startsWith('00') ? phone.slice(2) : phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+      }
     } catch (requestError) {
       setError(requestError.response?.data?.error?.message || requestError.message || 'The emergency request could not be created.');
     } finally {
@@ -166,7 +183,9 @@ export function EmergencyModal({ onClose, onSubmit, contacts = [], allowSimulate
   const contactAlertLabel = submitted?.alertContacts?.length
     ? submitted.alertContacts.every((item) => item.status === 'consent_required')
       ? 'Consent required; no alert delivered'
-      : 'In-app alert status confirmed by AlertX'
+      : submitted.alertContacts.some((item) => item.status === 'whatsapp_ready')
+        ? 'WhatsApp compose link is ready'
+        : 'In-app alert status confirmed by AlertX'
     : 'No trusted-contact alerts were confirmed';
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <div className="modal-card sos-modal" role="dialog" aria-modal="true" aria-labelledby="sos-title">
@@ -186,7 +205,7 @@ export function EmergencyModal({ onClose, onSubmit, contacts = [], allowSimulate
           <SOSLocationPicker location={location} onChange={selectMapLocation} />
           {requestFor === 'other' && <p className="sos-location-guidance">Your device location is not necessarily the other person’s location. Move the map pin to where they need help.</p>}
           <label className="sos-location-description">Address or landmark (optional)<input value={locationDescription} onChange={(event) => setLocationDescription(event.target.value)} maxLength={120} placeholder="Street, building, or nearby landmark" /></label>
-          {contacts.length > 0 && <fieldset className="sos-contact-selection"><legend>Trusted contacts</legend>{contacts.map((contact) => <label key={contact.contactId || contact.id}><input type="checkbox" checked={selectedContacts.includes(contact.contactId || contact.id)} onChange={(event) => setSelectedContacts((current) => event.target.checked ? [...current, contact.contactId || contact.id] : current.filter((id) => id !== (contact.contactId || contact.id)))} /><span>{contact.name}<small>{contact.notificationConsent ? 'Consent recorded' : 'Consent not recorded'}</small></span></label>)}<small>Only in-app alert records are supported; no SMS or email is sent.</small></fieldset>}
+          {contacts.length > 0 && <fieldset className="sos-contact-selection"><legend>Trusted contacts</legend>{contacts.map((contact) => <label key={contact.contactId || contact.id}><input type="checkbox" checked={selectedContacts.includes(contact.contactId || contact.id)} onChange={(event) => setSelectedContacts((current) => event.target.checked ? [...current, contact.contactId || contact.id] : current.filter((id) => id !== (contact.contactId || contact.id)))} /><span>{contact.name}<small>{contact.notificationConsent ? 'WhatsApp consent recorded' : 'Consent not recorded'}</small></span></label>)}<small>After SOS creation, WhatsApp opens with the emergency and live GPS link prefilled. Press Send in WhatsApp. No paid provider is required.</small></fieldset>}
           {error && <p className="form-error" role="alert">{error}</p>}
           <div className="modal-foot"><small>No real emergency services are contacted.</small><button className="button danger" disabled={!canReview} onClick={() => setConfirming(true)}>Review request <ChevronRight size={16} /></button></div>
         </>}

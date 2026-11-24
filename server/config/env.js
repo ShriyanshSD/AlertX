@@ -22,7 +22,7 @@ export const config = {
   demoGpsIntervalMs: Number(process.env.DEMO_GPS_INTERVAL_MS || 2000),
   locationHistoryIntervalMs: Number(process.env.LOCATION_HISTORY_INTERVAL_MS || 10000),
   corsOrigins: [
-    ...(process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
+    ...(process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174')
       .split(',')
       .map((origin) => origin.trim())
       .filter(Boolean),

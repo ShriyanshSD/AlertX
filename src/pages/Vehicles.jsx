@@ -7,7 +7,7 @@ import api, { getApiError } from '../services/api.js';
 
 const vehicleTypes = ['Ambulance', 'Fire Truck', 'Police Car'];
 const apiVehicleTypes = { Ambulance: 'ambulance', 'Fire Truck': 'fire_truck', 'Police Car': 'police' };
-const initialForm = { type: 'Ambulance', id: '' };
+const initialForm = { type: 'Ambulance', id: '', lat: '', lng: '' };
 export default function Vehicles() {
   const { vehicles, setVehicles, backend, error: vehicleError } = useVehicles();
   const { user } = useAuth();
@@ -18,6 +18,7 @@ export default function Vehicles() {
   const [editingVehicle, setEditingVehicle] = useState(null);
   const [editForm, setEditForm] = useState({ type: 'Ambulance', driverName: '' });
   const [pageError, setPageError] = useState('');
+  const [locating, setLocating] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const matchesStatus = (vehicle, filter) => {
     if (filter === 'available' || filter === 'en_route' || filter === 'offline') return vehicle.status === filter;
@@ -104,17 +105,30 @@ export default function Vehicles() {
     }
     setPageError('');
     try {
+      let fleetLocation;
+      if (form.lat !== '' && form.lng !== '') {
+        fleetLocation = { lat: Number(form.lat), lng: Number(form.lng) };
+      } else if (navigator.geolocation) {
+        try {
+          const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 }));
+          fleetLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
+        } catch {
+          throw new Error('Location access is required to deploy a fleet unit.');
+        }
+      } else {
+        throw new Error('This browser does not support GPS location.');
+      }
       let newVehicle;
       if (backend) {
         const { data } = await api.post('/vehicles', {
           vehicleId: form.id.trim().toUpperCase(),
           type: apiVehicleTypes[form.type],
-          location: { lat: 28.671 + Math.random() * 0.006, lng: 77.45 + Math.random() * 0.006 },
+          location: fleetLocation,
         });
         const serverVehicle = data.data.vehicle;
         newVehicle = { ...serverVehicle, id: serverVehicle.vehicleId, type: form.type, crew: serverVehicle.driverName || 'Unassigned', eta: '—' };
       } else {
-          newVehicle = { id: form.id.trim().toUpperCase(), type: form.type, status: 'available', lat: 28.671 + Math.random() * 0.006, lng: 77.45 + Math.random() * 0.006, speed: 0, heading: 0, crew: 'Unassigned', eta: '—', isDemo: true };
+          newVehicle = { id: form.id.trim().toUpperCase(), type: form.type, status: 'available', ...fleetLocation, speed: 0, heading: 0, crew: 'Unassigned', eta: '—', isDemo: true };
       }
       setVehicles((current) => [
         ...current.filter((vehicle) => vehicle.id !== newVehicle.id),
@@ -140,7 +154,16 @@ export default function Vehicles() {
         <button className="button primary" type="submit">Save service details</button>
       </div>
     </form>}
-    {adding && <form className="panel add-contact-form" onSubmit={addVehicle}><div className="panel-heading"><div><h2>Add fleet unit</h2><p>Choose a service type and unique vehicle ID</p></div><button type="button" className="icon-button" onClick={() => setAdding(false)} aria-label="Close form"><X size={16} /></button></div><div className="form-grid"><label>Vehicle ID<input required value={form.id} onChange={(event) => setForm({ ...form, id: event.target.value })} placeholder="e.g. AMB-103" /></label><label>Service type<select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}>{vehicleTypes.map((type) => <option key={type}>{type}</option>)}</select></label><button className="button primary" type="submit"><Plus size={15} /> Add to fleet</button></div></form>}
+    {adding && <form className="panel add-contact-form" onSubmit={addVehicle}><div className="panel-heading"><div><h2>Add fleet unit</h2><p>Choose a service type and deploy it at the admin device’s live GPS position</p></div><button type="button" className="icon-button" onClick={() => setAdding(false)} aria-label="Close form"><X size={16} /></button></div><div className="form-grid"><label>Vehicle ID<input required value={form.id} onChange={(event) => setForm({ ...form, id: event.target.value })} placeholder="e.g. AMB-103" /></label><label>Service type<select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}>{vehicleTypes.map((type) => <option key={type}>{type}</option>)}</select></label><button type="button" className="button secondary" disabled={locating} onClick={() => {
+      if (!navigator.geolocation) { setPageError('This browser does not support GPS location.'); return; }
+      setLocating(true);
+      setPageError('');
+      navigator.geolocation.getCurrentPosition(
+        (position) => { setForm((current) => ({ ...current, lat: String(position.coords.latitude), lng: String(position.coords.longitude) })); setLocating(false); },
+        (gpsError) => { setPageError(gpsError.code === 1 ? 'Allow location access to deploy this unit.' : 'Could not determine the admin device location.'); setLocating(false); },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 },
+      );
+    }}>{locating ? 'Finding location…' : 'Use admin device GPS'}</button>{form.lat && form.lng && <small className="muted">Deployment position: {Number(form.lat).toFixed(5)}, {Number(form.lng).toFixed(5)}</small>}<button className="button primary" type="submit"><Plus size={15} /> Add at this location</button></div></form>}
     <FilterTabs tabs={statusTabs} value={statusFilter} onChange={setStatusFilter} label="Filter vehicles by status" />
     <section className="panel vehicles-table-panel"><div className="panel-heading"><div><h2>Response fleet</h2><p>{vehicles.length} units · {backend ? 'server-managed fleet' : 'locally simulated status'}</p></div><div className="search-field table-search"><Search size={15} /><input placeholder="Search fleet..." value={query} onChange={(event) => setQuery(event.target.value)} /></div></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Vehicle</th><th>Type</th><th>Current status</th><th>Crew</th><th>Position</th><th>Speed</th>{canManage && <th>Actions</th>}</tr></thead><tbody>{filtered.map((vehicle) => <tr key={vehicle.id}><td><strong className="table-id">{vehicle.id}</strong></td><td>{vehicle.type}</td><td><select className="table-status-select" value={vehicle.status} disabled={!canManage} onChange={(event) => setStatus(vehicle.id, event.target.value)} aria-label={`Set ${vehicle.id} status`}>{['available', 'en_route', 'responding', 'patrolling', 'offline'].map((status) => <option key={status} value={status}>{status.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select></td><td>{vehicle.crew}</td><td className="muted">{Number.isFinite(vehicle.lat) && Number.isFinite(vehicle.lng) ? `${vehicle.lat.toFixed(4)}, ${vehicle.lng.toFixed(4)}` : 'Unavailable'}</td><td>{vehicle.speed || 0} km/h</td>{canManage && <td>    <button type="button" className="icon-button" disabled={!canManage} onClick={() => editVehicle(vehicle)} aria-label={`Edit ${vehicle.id}`}><Pencil size={15} /></button>
     <button type="button" className="icon-button danger-hover" disabled={!canManage} onClick={() => remove(vehicle.id)} aria-label={`Remove ${vehicle.id}`}><X size={15} /></button></td>}</tr>)}</tbody></table>{filtered.length === 0 && <p className="muted small empty-filter">No vehicles match your filters.</p>}</div></section>

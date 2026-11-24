@@ -51,7 +51,25 @@ export function createApp({
   app.use(cors({
     credentials: true,
     origin(origin, callback) {
-      if (!origin || config.corsOrigins.includes(origin)) return callback(null, true);
+      let developmentOrigin = false;
+      let vercelPreviewOrigin = false;
+      if (config.nodeEnv !== 'production' && origin) {
+        try {
+          const url = new URL(origin);
+          developmentOrigin = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(url.hostname)
+            && /^5\d{3}$/.test(url.port);
+        } catch {
+          developmentOrigin = false;
+        }
+      }
+      if (origin) {
+        try {
+          vercelPreviewOrigin = /^https:\/\/[^/]+\.vercel\.app$/.test(origin);
+        } catch {
+          vercelPreviewOrigin = false;
+        }
+      }
+      if (!origin || config.corsOrigins.includes(origin) || developmentOrigin || vercelPreviewOrigin) return callback(null, true);
       return callback(new AppError(403, 'Origin is not allowed by CORS.'));
     },
   }));

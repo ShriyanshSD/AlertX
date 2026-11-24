@@ -16,7 +16,7 @@ const pointSchema = new mongoose.Schema({
 
 const alertContactSchema = new mongoose.Schema({
   contactId: { type: mongoose.Schema.Types.ObjectId, ref: 'Contact', required: true },
-  status: { type: String, enum: ['in_app_created', 'consent_required'], required: true },
+  status: { type: String, enum: ['in_app_created', 'consent_required', 'whatsapp_ready'], required: true },
   createdAt: { type: Date, default: Date.now },
 }, { _id: false });
 
