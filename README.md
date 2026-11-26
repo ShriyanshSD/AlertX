@@ -1,8 +1,8 @@
-# ResQ — AI-Powered Emergency Response Demo
+#AlertX — AI-Powered Emergency Response Demo
 
-ResQ is a college minor project for a smart emergency response and live tracking system. It combines a React/Vite dashboard with an Express/MongoDB API, authenticated Socket.IO updates, demo GPS simulation, source-grounded emergency guidance, an opt-in nearby-resource lookup, and a private stress check-in.
+AlertX is a college minor project for a smart emergency response and live tracking system. It combines a React/Vite dashboard with an Express/MongoDB API, authenticated Socket.IO updates, demo GPS simulation, source-grounded emergency guidance, an opt-in nearby-resource lookup, and a private stress check-in.
 
-> **Demo only:** ResQ does not contact emergency services or dispatch a vehicle in the real world. Vehicle locations and demo accounts are fictional. OpenStreetMap facility data is community-mapped and may be incomplete or out of date. Do not rely on this application during a real emergency.
+> **Demo only:** AlertX does not contact emergency services or dispatch a vehicle in the real world. Vehicle locations and demo accounts are fictional. OpenStreetMap facility data is community-mapped and may be incomplete or out of date. Do not rely on this application during a real emergency.
 
 ## Requirements
 
